@@ -6,6 +6,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 	_ "github.com/mattn/go-sqlite3"
+	"golang.local/app-srv/app"
 	"golang.local/app-srv/conf"
 	"golang.local/app-srv/web"
 	"golang.local/gc-c-db/db"
@@ -15,7 +16,6 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -84,13 +84,6 @@ func main() {
 		log.Fatalln("Failed to open DB connection:", err)
 	}
 
-	if os.Getenv("DB_RESET") == "1" {
-		err = manager.DropAllTables()
-		if err != nil {
-			log.Fatalln("Failed to reset DB:", err)
-		}
-	}
-
 	err = manager.AssureAllTables()
 	if err != nil {
 		log.Fatalln("Failed to assure DB schema:", err)
@@ -98,14 +91,17 @@ func main() {
 
 	//Load keys:
 	pubk, err := jwt.ParseRSAPublicKeyFromPEM([]byte(configYml.Identity.PublicKey))
-	if err != nil {
-		log.Fatalln("Failed to decode public key:", err)
+	if err != nil && configYml.Identity.PublicKey != "" {
+		log.Println("[WARN] Failed to decode public key:", err)
 	}
-	runtime.KeepAlive(pubk) //TODO: Remember, the key will get downloaded if not provided
 
 	//Server definitions:
 	log.Printf("[Main] Starting up HTTP server on %s...\n", configYml.Listen.Web)
-	webServer := web.New(configYml)
+	webServer, muxer := web.New(configYml)
+
+	log.Println("[Main] Starting App Server Processing...")
+	appServer := &app.Server{}
+	appServer.Activate(configYml, pubk, muxer)
 
 	//Safe Shutdown
 	sigs := make(chan os.Signal, 1)
@@ -124,6 +120,12 @@ func main() {
 
 		log.Printf("[Main] Shutting down HTTP server...\n")
 		err := webServer.Close()
+		if err != nil {
+			log.Println(err)
+		}
+
+		log.Println("[Main] Shutting down App Server Processing...")
+		err = appServer.Close()
 		if err != nil {
 			log.Println(err)
 		}

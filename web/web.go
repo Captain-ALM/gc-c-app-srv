@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-func New(yaml conf.ConfigYaml) *http.Server {
+func New(yaml conf.ConfigYaml) (*http.Server, *mux.Router) {
 	router := mux.NewRouter()
 	router.PathPrefix("/").HandlerFunc(domainNotAllowed)
 	if yaml.Listen.Web == "" {
@@ -20,7 +20,7 @@ func New(yaml conf.ConfigYaml) *http.Server {
 		WriteTimeout: yaml.Listen.GetWriteTimeout(),
 	}
 	go runBackgroundHttp(s)
-	return s
+	return s, router
 }
 
 func runBackgroundHttp(s *http.Server) {
