@@ -1,0 +1,15 @@
+# App Server Service (Dev)
+[Unit]
+Description=App Server Service (Dev)
+
+[Service]
+WorkingDirectory=/etc/appsrv_
+ExecStart=/usr/local/bin/appsrv_
+User=root
+Group=root
+Type=simple
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target
