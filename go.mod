@@ -8,7 +8,7 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/joho/godotenv v1.5.1
 	github.com/mattn/go-sqlite3 v1.14.19
-	golang.local/gc-c-db v1.1.0
+	golang.local/gc-c-db v1.1.1
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -21,7 +21,8 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421 // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/syndtr/goleveldb v1.0.0 // indirect
-	golang.local/gc-c-com v1.3.1 // indirect
+	golang.local/gc-c-com v1.3.3 // indirect
+	golang.local/google-auth-id-token-verifier v0.0.0-20231213003332-5da84620427d // indirect
 	golang.org/x/exp v0.0.0-20231226003508-02704c960a9b // indirect
 	golang.org/x/net v0.19.0 // indirect
 	golang.org/x/sys v0.15.0 // indirect

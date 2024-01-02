@@ -101,7 +101,7 @@ func main() {
 
 	log.Println("[Main] Starting App Server Processing...")
 	appServer := &app.Server{}
-	appServer.Activate(configYml, pubk, muxer)
+	appServer.Activate(configYml, pubk, muxer, manager)
 
 	//Safe Shutdown
 	sigs := make(chan os.Signal, 1)
