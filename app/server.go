@@ -40,8 +40,6 @@ func (s *Server) Activate(config conf.ConfigYaml, pukk *rsa.PublicKey, router *m
 	if s.publicKey == nil {
 		s.GetPublicKey()
 	}
-	go s.connectionMonitor(config.App)
-	go s.gameMonitor(config.App)
 	wsListener := &transport.ListenWebsocket{Upgrader: websocket.Upgrader{HandshakeTimeout: config.Listen.GetReadTimeout(), ReadBufferSize: 8192, WriteBufferSize: 8192}}
 	rsListener := &transport.ListenHandler{}
 	s.multiListen = transport.NewMultiListener([]transport.Listener{wsListener, rsListener}, nil, s.clientConnect, s.clientClose, config.Listen.GetReadTimeout())
@@ -53,49 +51,25 @@ func (s *Server) Activate(config conf.ConfigYaml, pukk *rsa.PublicKey, router *m
 	}
 }
 
-func (s *Server) connectionMonitor(cnf conf.AppYaml) {
-	tOut := time.NewTicker(cnf.GetLifetimePolltime())
+func (s *Server) connectionMonitor(conn *Connection) {
+	tOut := time.NewTimer(conn.TimeTillExpiry())
 	defer tOut.Stop()
-	for s.active {
-		select {
-		case <-s.byeChan:
-			return
-		case <-tOut.C:
-			var toRem []*Connection
-			s.conRWMutex.RLock()
-			for _, cc := range s.connections {
-				if cc.HasExpired() {
-					toRem = append(toRem, cc)
-				}
-			}
-			s.conRWMutex.RUnlock()
-			for _, cc := range toRem {
-				_ = cc.Close()
-			}
-		}
+	select {
+	case <-s.byeChan:
+	case <-tOut.C:
+		_ = conn.Close()
+	case <-conn.GetTerminationChannel():
 	}
 }
 
-func (s *Server) gameMonitor(cnf conf.AppYaml) {
-	tOut := time.NewTicker(cnf.GetLifetimePolltime())
+func (s *Server) gameMonitor(game *Game) {
+	tOut := time.NewTimer(game.TimeTillExpiry())
 	defer tOut.Stop()
-	for s.active {
-		select {
-		case <-s.byeChan:
-			return
-		case <-tOut.C:
-			var toRem []*Game
-			s.gamRWMutex.RLock()
-			for _, cc := range s.games {
-				if cc.HasExpired() {
-					toRem = append(toRem, cc)
-				}
-			}
-			s.gamRWMutex.RUnlock()
-			for _, cc := range toRem {
-				_ = cc.Close()
-			}
-		}
+	select {
+	case <-s.byeChan:
+	case <-tOut.C:
+		_ = game.Close()
+	case <-game.GetTerminationChannel():
 	}
 }
 
@@ -140,4 +114,8 @@ func (s *Server) GetPublicKey() {
 			}
 		}
 	}
+}
+
+func (s *Server) connectionProcessor(conn *Connection, cnf conf.AppYaml) {
+	//TODO: Finish
 }

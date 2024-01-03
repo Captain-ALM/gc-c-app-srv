@@ -10,7 +10,6 @@ type AppYaml struct {
 	ConnectionLifetime time.Duration `yaml:"connectionLifetime"`
 	GameLifetime       time.Duration `yaml:"gameLifetime"`
 	Timeout            time.Duration `yaml:"timeout"`
-	LifetimePolltime   time.Duration `yaml:"lifetimePolltime"`
 	OAuthAudiences     []string      `yaml:"oAuthAudiences"`
 }
 
@@ -66,20 +65,4 @@ func (ay AppYaml) GetTimeout() time.Duration {
 	} else {
 		return ay.Timeout
 	}
-}
-
-func (ay AppYaml) GetLifetimePolltime() time.Duration {
-	lPollt := ay.LifetimePolltime
-	cLT := ay.GetConnectionLifetime()
-	if lPollt > cLT {
-		lPollt = cLT / 2
-	}
-	gLT := ay.GetGameLifetime()
-	if lPollt > gLT {
-		lPollt = gLT / 2
-	}
-	if lPollt <= 0 {
-		return time.Second / 2
-	}
-	return lPollt
 }
