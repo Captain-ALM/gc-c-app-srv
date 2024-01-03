@@ -2,7 +2,6 @@ package app
 
 import (
 	"crypto/sha256"
-	"github.com/google/uuid"
 	"golang.local/gc-c-com/packet"
 	"golang.local/gc-c-com/transport"
 	"golang.local/gc-c-db/db"
@@ -13,7 +12,6 @@ import (
 func NewConnection(manager *db.Manager, transport transport.Transport, expiry time.Time) *Connection {
 	nConn := &Connection{
 		manager:       manager,
-		id:            uuid.New(),
 		transport:     transport,
 		intake:        make(chan *packet.Packet),
 		outtakeServer: make(chan *packet.Packet),
@@ -32,7 +30,6 @@ func NewConnection(manager *db.Manager, transport transport.Transport, expiry ti
 
 type Connection struct {
 	manager       *db.Manager
-	id            uuid.UUID
 	transport     transport.Transport
 	intake        chan *packet.Packet
 	outtakeServer chan *packet.Packet
@@ -45,11 +42,11 @@ type Connection struct {
 	termChan      chan bool
 }
 
-func (c *Connection) GetID() uuid.UUID {
+func (c *Connection) GetID() transport.Transport {
 	if c == nil {
-		return uuid.Nil
+		return nil
 	}
-	return c.id
+	return c.transport
 }
 
 func (c *Connection) GetIntake() chan<- *packet.Packet {
@@ -61,11 +58,11 @@ func (c *Connection) GetIntake() chan<- *packet.Packet {
 
 func (c *Connection) intakePump() {
 	for c.transport.IsActive() {
-		pk, ok := <-c.intake
-		if ok {
-			_ = c.transport.Send(pk)
-		} else {
+		select {
+		case <-c.termChan:
 			return
+		case pk := <-c.intake:
+			_ = c.transport.Send(pk)
 		}
 	}
 }
@@ -90,8 +87,20 @@ func (c *Connection) outtakePump() {
 		cWG.Add(2)
 		pk, err := c.transport.Receive()
 		if err == nil {
-			go func() { c.outtakeServer <- pk; cWG.Done() }()
-			go func() { c.outtakeGame <- pk; cWG.Done() }()
+			go func() {
+				select {
+				case <-c.termChan:
+				case c.outtakeServer <- pk:
+				}
+				cWG.Done()
+			}()
+			go func() {
+				select {
+				case <-c.termChan:
+				case c.outtakeGame <- pk:
+				}
+				cWG.Done()
+			}()
 			cWG.Wait()
 		} else {
 			return
@@ -154,16 +163,16 @@ func (c *Connection) RejoinGame(guestID uint32) bool {
 	return c.player != nil
 }
 
-func (c *Connection) AddScore(score uint32, correct bool) {
+func (c *Connection) AddScore(amount uint32, correct bool, streakEnabled bool) (score uint32, streak uint32) {
 	if c == nil {
-		return
+		return 0, 0
 	}
 	c.plaMutex.Lock()
 	defer c.plaMutex.Unlock()
 	if c.player == nil {
-		return
+		return 0, 0
 	}
-	c.player.AddScore(score, correct, c.manager)
+	return c.player.AddScore(amount, correct, streakEnabled, c.manager)
 }
 
 func (c *Connection) NextQ() {
@@ -192,6 +201,13 @@ func (c *Connection) KickPlayer(requireDelete bool) bool {
 		return c.player.DeleteGuest(c.manager)
 	}
 	return true
+}
+
+func (c *Connection) GetGameID() uint32 {
+	if c == nil || c.player == nil {
+		return 0
+	}
+	return c.player.GetGameID()
 }
 
 func (c *Connection) HasExpired() bool {
@@ -223,10 +239,10 @@ func (c *Connection) Close() error {
 	defer c.closeMutex.Unlock()
 	if c.transport.IsActive() {
 		//c.KickPlayer(true)
-		close(c.intake)
-		close(c.outtakeServer)
-		close(c.outtakeGame)
 		close(c.termChan)
+		//close(c.intake)
+		//close(c.outtakeServer)
+		//close(c.outtakeGame)
 	}
 	return c.transport.Close()
 }

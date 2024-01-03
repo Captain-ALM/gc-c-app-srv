@@ -48,16 +48,28 @@ type Player struct {
 	metadata         tables.Guest
 }
 
-func (p *Player) AddScore(amount uint32, correct bool, manager *db.Manager) {
+func (p *Player) GetGameID() uint32 {
+	if p == nil {
+		return 0
+	}
+	return p.metadata.GameID
+}
+
+func (p *Player) AddScore(amount uint32, correct bool, streakEnabled bool, manager *db.Manager) (score uint32, streak uint32) {
 	if p == nil || p.host || p.answered {
-		return
+		return 0, 0
 	}
 	p.answered = true
-	p.metadata.Score += amount * (p.streakMultiplier + 1)
-	if correct {
-		p.streakMultiplier += 1
+	if streakEnabled {
+		p.metadata.Score += amount * (p.streakMultiplier + 1)
+		if correct {
+			p.streakMultiplier += 1
+		}
+	} else {
+		p.metadata.Score += amount
 	}
 	_ = manager.Save(&p.metadata)
+	return p.metadata.Score, p.streakMultiplier
 }
 
 func (p *Player) GetNickname() string {

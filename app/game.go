@@ -1,7 +1,7 @@
 package app
 
 import (
-	"github.com/google/uuid"
+	"golang.local/gc-c-com/transport"
 	"golang.local/gc-c-db/db"
 	"golang.local/gc-c-db/tables"
 	"sync"
@@ -28,13 +28,16 @@ func NewGame(manager *db.Manager, onEnd func(game *Game), hostConn *Connection, 
 	if err != nil {
 		return nil
 	}
-	conns := make(map[uuid.UUID]*Connection)
+	conns := make(map[transport.Transport]*Connection)
 	conns[hostConn.GetID()] = hostConn
 	nGam := &Game{
 		manager:       manager,
 		connections:   conns,
 		hostConn:      hostConn,
 		hostConnNotif: make(chan bool),
+		proceedNotif:  make(chan bool),
+		answerNotif:   make(chan uint32),
+		answerCMutex:  &sync.Mutex{},
 		conRWMutex:    &sync.RWMutex{},
 		quiz:          tQuiz,
 		metadata:      gamMeta,
@@ -49,15 +52,26 @@ func NewGame(manager *db.Manager, onEnd func(game *Game), hostConn *Connection, 
 
 type Game struct {
 	manager       *db.Manager
-	connections   map[uuid.UUID]*Connection
+	connections   map[transport.Transport]*Connection
 	hostConn      *Connection
 	hostConnNotif chan bool
+	proceedNotif  chan bool
+	answerNotif   chan uint32
+	answerCount   uint32
+	answerCMutex  *sync.Mutex
 	conRWMutex    *sync.RWMutex
 	quiz          tables.Quiz
 	metadata      tables.Game
 	endCallback   func(game *Game)
 	closeMutex    *sync.Mutex
 	termChan      chan bool
+}
+
+func (g *Game) GetID() uint32 {
+	if g == nil {
+		return 0
+	}
+	return g.metadata.ID
 }
 
 func (g *Game) AddGuest(newGuest *Connection) bool {
@@ -89,7 +103,10 @@ func (g *Game) ReAddHost(newHost *Connection) bool {
 	g.hostConn = newHost
 	g.connections[newHost.GetID()] = newHost
 	go g.hostRecvLoop(newHost)
-	g.hostConnNotif <- true
+	select {
+	case <-g.termChan:
+	case g.hostConnNotif <- true:
+	}
 	return true
 }
 
@@ -100,16 +117,21 @@ func (g *Game) RemoveConnection(conn *Connection) bool {
 	g.conRWMutex.Lock()
 	defer g.conRWMutex.Unlock()
 	if conn == g.hostConn {
-		g.hostConnNotif <- false
+		select {
+		case <-g.termChan:
+		case g.hostConnNotif <- false:
+		}
 		g.hostConn = nil
-		delete(g.connections, conn.GetID())
 	}
 	delete(g.connections, conn.GetID())
 	return true
 }
 
 func (g *Game) gameSendLoop() {
-	//TODO: Finish
+	defer func() { _ = g.Close() }()
+	for g.IsActive() {
+
+	}
 }
 
 func (g *Game) hostRecvLoop(conn *Connection) {
@@ -120,6 +142,21 @@ func (g *Game) hostRecvLoop(conn *Connection) {
 func (g *Game) guestRecvLoop(conn *Connection) {
 	defer g.RemoveConnection(conn)
 	//TODO: Finish
+}
+
+func (g *Game) QuestionAnswered(qNum uint32) {
+	if g == nil || qNum == 0 {
+		return
+	}
+	g.answerCMutex.Lock()
+	defer g.answerCMutex.Unlock()
+	if qNum == g.metadata.QuestionNo {
+		g.answerCount += 1
+		select {
+		case <-g.termChan:
+		case g.answerNotif <- g.answerCount:
+		}
+	}
 }
 
 func (g *Game) HasExpired() bool {
@@ -159,8 +196,10 @@ func (g *Game) Close() error {
 	if g.IsActive() {
 		g.metadata.State = byte(GameStateFinish)
 		_ = g.manager.Delete(&g.metadata)
-		close(g.hostConnNotif)
 		close(g.termChan)
+		//close(g.hostConnNotif)
+		//close(g.proceedNotif)
+		//close(g.answerNotif)
 		g.kickAll()
 		if g.endCallback != nil {
 			g.endCallback(g)

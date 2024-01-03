@@ -3,7 +3,6 @@ package app
 import (
 	"crypto/rsa"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"golang.local/app-srv/conf"
@@ -22,10 +21,11 @@ type Server struct {
 	publicKey   *rsa.PublicKey
 	config      conf.ConfigYaml
 	byeChan     chan bool
-	connections map[uuid.UUID]*Connection
+	connections map[transport.Transport]*Connection
 	conRWMutex  *sync.RWMutex
 	games       map[uint32]*Game
 	gamRWMutex  *sync.RWMutex
+	manager     *db.Manager
 }
 
 func (s *Server) Activate(config conf.ConfigYaml, pukk *rsa.PublicKey, router *mux.Router, manager *db.Manager) {
@@ -35,6 +35,7 @@ func (s *Server) Activate(config conf.ConfigYaml, pukk *rsa.PublicKey, router *m
 	s.active = true
 	s.conRWMutex = &sync.RWMutex{}
 	s.gamRWMutex = &sync.RWMutex{}
+	s.manager = manager
 	s.config = config
 	s.publicKey = pukk
 	if s.publicKey == nil {
@@ -74,19 +75,25 @@ func (s *Server) gameMonitor(game *Game) {
 }
 
 func (s *Server) clientConnect(l transport.Listener, t transport.Transport) {
-	if s == nil {
+	if s == nil || t == nil {
 		return
 	}
-	//TODO: Implement via method in connection passing the server pointer too as well as app config
-	panic("not implemented")
+	conn := NewConnection(s.manager, t, time.Now().Add(s.config.App.GetConnectionLifetime()))
+	if conn != nil {
+		s.conRWMutex.Lock()
+		defer s.conRWMutex.Unlock()
+		s.connections[conn.GetID()] = conn
+		go s.connectionProcessor(conn)
+	}
 }
 
 func (s *Server) clientClose(t transport.Transport, err error) {
-	if s == nil {
+	if s == nil || t == nil {
 		return
 	}
-	//TODO: Implement via method in connection passing the server pointer too as well as app config
-	panic("not implemented")
+	s.conRWMutex.Lock()
+	defer s.conRWMutex.Unlock()
+	delete(s.connections, t)
 }
 
 func (s *Server) Close() error {
@@ -116,6 +123,15 @@ func (s *Server) GetPublicKey() {
 	}
 }
 
-func (s *Server) connectionProcessor(conn *Connection, cnf conf.AppYaml) {
+func (s *Server) connectionProcessor(conn *Connection) {
 	//TODO: Finish
+}
+
+func (s *Server) gameEnd(game *Game) {
+	if s == nil || game == nil {
+		return
+	}
+	s.gamRWMutex.Lock()
+	defer s.gamRWMutex.Unlock()
+	delete(s.games, game.GetID())
 }
