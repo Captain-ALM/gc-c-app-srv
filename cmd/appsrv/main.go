@@ -112,7 +112,10 @@ func main() {
 	log.Printf("[Main] Took '%s' to fully initialize modules\n", z.String())
 
 	go func() {
-		<-sigs
+		select {
+		case <-appServer.GetByeChannel():
+		case <-sigs:
+		}
 		fmt.Printf("\n")
 
 		log.Printf("[Main] Attempting safe shutdown\n")

@@ -98,3 +98,17 @@ func (s *Session) IsMasterServer() bool {
 	}
 	return s.metadata.Email == "" && isNilOrEmpty(s.metadata.TokenHash)
 }
+
+func (s *Session) GetEmail() string {
+	if s == nil {
+		return ""
+	}
+	return s.metadata.Email
+}
+
+func (s *Session) GetTokenHash() []byte {
+	if s == nil {
+		return nil
+	}
+	return s.metadata.TokenHash
+}

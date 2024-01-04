@@ -245,9 +245,6 @@ func (g *Game) gameSendLoop() {
 			}
 		case GameStateLeaderboard:
 			g.sendToAll(packet.FromNew(packets.NewGameLeaderboard(g.getLeaderboard(), nil)))
-			if g.metadata.QuestionNo+1 > uint32(len(g.quizQuestions.Questions)) {
-				return
-			}
 			g.metadata.State = byte(GameStateLeaderboardWait)
 			err := g.manager.Save(&g.metadata)
 			if err != nil {
@@ -264,6 +261,9 @@ func (g *Game) gameSendLoop() {
 			case <-g.answerNotif:
 			case <-g.connChangeNotif:
 			case <-g.proceedNotif:
+				if g.metadata.QuestionNo+1 > uint32(len(g.quizQuestions.Questions)) {
+					return
+				}
 				g.metadata.QuestionNo += 1
 				g.signalNextQ()
 				g.metadata.State = byte(GameStateQuestion)
@@ -337,6 +337,8 @@ func (g *Game) hostRecvLoop(conn *Connection) {
 				select {
 				case <-g.termChan:
 					return
+				case <-conn.GetTerminationChannel():
+					return
 				case g.proceedNotif <- true:
 				}
 			case packets.KickGuest:
@@ -345,6 +347,7 @@ func (g *Game) hostRecvLoop(conn *Connection) {
 				if err == nil && pyl.ID > 0 {
 					kConn := g.getConnectionFromID(pyl.ID)
 					ForkedSend(kConn, packet.FromNew(packets.NewGameError("Kicked", nil)))
+					ForkedSend(kConn, packet.FromNew(packets.NewIDGuest(0, nil)))
 					g.RemoveConnection(kConn)
 				}
 			}
@@ -432,12 +435,12 @@ func (g *Game) Close() error {
 	if g.IsActive() {
 		g.metadata.State = byte(GameStateFinish)
 		_ = g.manager.Delete(g.metadata.GetIDObject())
+		g.kickAll()
 		close(g.termChan)
 		//close(g.hostConnNotif)
 		//close(g.proceedNotif)
 		//close(g.answerNotif)
 		//close(g.connChangeNotif)
-		g.kickAll()
 		if g.endCallback != nil {
 			g.endCallback(g)
 		}

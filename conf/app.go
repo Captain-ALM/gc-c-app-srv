@@ -7,6 +7,7 @@ type AppYaml struct {
 	MaxQuestions       uint32        `yaml:"maxQuestions"`
 	MaxAnswers         uint32        `yaml:"maxAnswers"`
 	MaxGuests          uint32        `yaml:"maxGuests"`
+	MaxConnections     uint32        `json:"maxConnections"`
 	ConnectionLifetime time.Duration `yaml:"connectionLifetime"`
 	GameLifetime       time.Duration `yaml:"gameLifetime"`
 	Timeout            time.Duration `yaml:"timeout"`
@@ -39,6 +40,13 @@ func (ay AppYaml) GetMaxGuests() int {
 		return 64
 	}
 	return int(ay.MaxGuests)
+}
+
+func (ay AppYaml) GetMaxConnections() int {
+	if ay.MaxConnections == 0 || ay.MaxConnections > 32768 {
+		return 32768
+	}
+	return int(ay.MaxConnections)
 }
 
 func (ay AppYaml) GetConnectionLifetime() time.Duration {

@@ -7,10 +7,13 @@ import (
 	"github.com/gorilla/websocket"
 	"golang.local/app-srv/conf"
 	"golang.local/gc-c-com/packet"
+	"golang.local/gc-c-com/packets"
 	"golang.local/gc-c-com/transport"
 	"golang.local/gc-c-db/db"
 	"io"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -84,6 +87,7 @@ func (s *Server) clientConnect(l transport.Listener, t transport.Transport) {
 		s.conRWMutex.Lock()
 		defer s.conRWMutex.Unlock()
 		s.connections[conn.GetID()] = conn
+		go s.connectionMonitor(conn)
 		go s.connectionProcessor(conn)
 	}
 }
@@ -102,7 +106,7 @@ func (s *Server) Close() error {
 		return nil
 	}
 	s.active = false
-	close(s.byeChan)
+	defer close(s.byeChan)
 	return s.multiListen.Close()
 }
 
@@ -125,7 +129,103 @@ func (s *Server) GetPublicKey() {
 }
 
 func (s *Server) connectionProcessor(conn *Connection) {
-	// TODO : Finish
+	defer func() { _ = conn.Close() }()
+	for s.active && conn.IsActive() {
+		select {
+		case <-s.byeChan:
+			return
+		case <-conn.GetTerminationChannel():
+			return
+		case pk := <-conn.GetOuttakeServer():
+			switch pk.GetCommand() {
+			case packets.ID:
+				if (s.publicKey != nil && pk.Valid(s.publicKey)) || InDebugMode() {
+					var pyl packets.IDPayload
+					err := pk.GetPayload(&pyl)
+					if err != nil && pyl.ID == s.config.Identity.ID {
+						InlineSend(conn, packet.FromNew(packets.NewID(s.config.Identity.ID, nil)))
+						DebugPrintln("Master Connected")
+						conn.Session = NewMasterSession()
+					}
+				}
+			case packets.QueryStatus:
+				if conn.Session.IsMasterServer() {
+					InlineSend(conn, packet.FromNew(packets.NewCurrentStatus(s.config.Identity.ID, s.getConnectionCount(), uint32(s.config.App.GetMaxConnections()), nil)))
+					DebugPrintln("Master Queried")
+				}
+			case packets.Halt:
+				if conn.Session.IsMasterServer() {
+					_ = s.Close()
+					DebugPrintln("App Server Closed")
+					return
+				}
+			case packets.AuthCheck:
+				if conn.Session == nil {
+					InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusLoggedOut, nil, "", nil)))
+				} else {
+					InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusLoggedIn, conn.Session.GetTokenHash(), conn.Session.GetEmail(), nil)))
+				}
+			case packets.AuthLogout:
+				if conn.Session.Invalidate(s.manager) {
+					conn.Session = nil
+					InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusLoggedOut, nil, "", nil)))
+				}
+			case packets.UserDelete:
+				if conn.Session != nil && conn.Session.DeleteUser(s.manager) {
+					InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusLoggedOut, nil, "", nil)))
+				}
+			case packets.TokenLogin:
+				var pyl packets.TokenLoginPayload
+				err := pk.GetPayload(&pyl)
+				if err != nil {
+					if conn.Session == nil {
+						conn.Session = NewSession(pyl.Token, nil, s.manager, s.config.App)
+						if conn.Session == nil {
+							InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusRejectedJWT, nil, "", nil)))
+						} else {
+							InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusAcceptedJWT, conn.Session.GetTokenHash(), conn.Session.GetEmail(), nil)))
+							InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusLoggedIn, conn.Session.GetTokenHash(), conn.Session.GetEmail(), nil)))
+						}
+					} else {
+						if conn.Session.ValidateJWT(pyl.Token, s.manager, s.config.App) {
+							InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusAcceptedJWT, conn.Session.GetTokenHash(), conn.Session.GetEmail(), nil)))
+						} else {
+							InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusRejectedJWT, nil, "", nil)))
+						}
+					}
+				}
+			case packets.HashLogin:
+				var pyl packets.HashLoginPayload
+				err := pk.GetPayload(&pyl)
+				if err != nil {
+					if conn.Session == nil {
+						conn.Session = NewSession("", pyl.Hash, s.manager, s.config.App)
+						if conn.Session == nil {
+							InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusRejectedHash, nil, "", nil)))
+						} else {
+							InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusAcceptedHash, conn.Session.GetTokenHash(), conn.Session.GetEmail(), nil)))
+							InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusLoggedIn, conn.Session.GetTokenHash(), conn.Session.GetEmail(), nil)))
+						}
+					} else {
+						if conn.Session.ValidateHash(pyl.Hash, s.manager) {
+							InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusAcceptedHash, conn.Session.GetTokenHash(), conn.Session.GetEmail(), nil)))
+						} else {
+							InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusRejectedHash, nil, "", nil)))
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+func (s *Server) getConnectionCount() uint32 {
+	if s == nil {
+		return 0
+	}
+	s.gamRWMutex.RLock()
+	defer s.gamRWMutex.RUnlock()
+	return uint32(len(s.connections))
 }
 
 func (s *Server) gameEnd(game *Game) {
@@ -137,11 +237,30 @@ func (s *Server) gameEnd(game *Game) {
 	delete(s.games, game.GetID())
 }
 
+func (s *Server) GetByeChannel() <-chan bool {
+	if s == nil {
+		return nil
+	}
+	return s.byeChan
+}
+
 func ForkedSend(conn *Connection, toSend *packet.Packet) {
-	go func() {
-		select {
-		case <-conn.GetTerminationChannel():
-		case conn.GetIntake() <- toSend:
-		}
-	}()
+	go InlineSend(conn, toSend)
+}
+
+func InlineSend(conn *Connection, toSend *packet.Packet) {
+	select {
+	case <-conn.GetTerminationChannel():
+	case conn.GetIntake() <- toSend:
+	}
+}
+
+func InDebugMode() bool {
+	return os.Getenv("DEBUG") == "1"
+}
+
+func DebugPrintln(msg string) {
+	if os.Getenv("DEBUG") == "1" {
+		log.Println("DEBUG:", msg)
+	}
 }
