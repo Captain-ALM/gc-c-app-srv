@@ -49,6 +49,27 @@ func (c *Connection) GetID() transport.Transport {
 	return c.transport
 }
 
+func (c *Connection) GetPlayerID() uint32 {
+	if c == nil || c.player == nil {
+		return 0
+	}
+	return c.player.GetID()
+}
+
+func (c *Connection) GetGameID() uint32 {
+	if c == nil || c.player == nil {
+		return 0
+	}
+	return c.player.GetGameID()
+}
+
+func (c *Connection) GetNickname() string {
+	if c == nil || c.player == nil {
+		return ""
+	}
+	return c.player.GetNickname()
+}
+
 func (c *Connection) GetIntake() chan<- *packet.Packet {
 	if c == nil {
 		return nil
@@ -175,6 +196,13 @@ func (c *Connection) AddScore(amount uint32, correct bool, streakEnabled bool) (
 	return c.player.AddScore(amount, correct, streakEnabled, c.manager)
 }
 
+func (c *Connection) GetScore() (score uint32, streak uint32) {
+	if c == nil || c.player == nil {
+		return 0, 0
+	}
+	return c.player.GetScore()
+}
+
 func (c *Connection) NextQ() {
 	if c == nil {
 		return
@@ -201,13 +229,6 @@ func (c *Connection) KickPlayer(requireDelete bool) bool {
 		return c.player.DeleteGuest(c.manager)
 	}
 	return true
-}
-
-func (c *Connection) GetGameID() uint32 {
-	if c == nil || c.player == nil {
-		return 0
-	}
-	return c.player.GetGameID()
 }
 
 func (c *Connection) HasExpired() bool {

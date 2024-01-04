@@ -88,7 +88,7 @@ func (s *Session) DeleteUser(manager *db.Manager) bool {
 	if s == nil {
 		return false
 	}
-	err := manager.Delete(&s.metadata)
+	err := manager.Delete(s.metadata.GetIDObject())
 	return err == nil
 }
 

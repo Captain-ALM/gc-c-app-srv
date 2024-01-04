@@ -6,6 +6,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"golang.local/app-srv/conf"
+	"golang.local/gc-c-com/packet"
 	"golang.local/gc-c-com/transport"
 	"golang.local/gc-c-db/db"
 	"io"
@@ -124,7 +125,7 @@ func (s *Server) GetPublicKey() {
 }
 
 func (s *Server) connectionProcessor(conn *Connection) {
-	//TODO: Finish
+	// TODO : Finish
 }
 
 func (s *Server) gameEnd(game *Game) {
@@ -134,4 +135,13 @@ func (s *Server) gameEnd(game *Game) {
 	s.gamRWMutex.Lock()
 	defer s.gamRWMutex.Unlock()
 	delete(s.games, game.GetID())
+}
+
+func ForkedSend(conn *Connection, toSend *packet.Packet) {
+	go func() {
+		select {
+		case <-conn.GetTerminationChannel():
+		case conn.GetIntake() <- toSend:
+		}
+	}()
 }
