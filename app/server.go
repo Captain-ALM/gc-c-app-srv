@@ -153,6 +153,7 @@ func (s *Server) connectionProcessor(conn *Connection) {
 		case pk := <-conn.GetOuttakeServer():
 			switch pk.GetCommand() {
 			case packets.ID:
+				DebugErrIsNil(pk.Verify(s.publicKey))
 				if (s.publicKey != nil && pk.Valid(s.publicKey)) || os.Getenv("NO_MASTER_VERIFY") == "1" {
 					var pyl packets.IDPayload
 					err := pk.GetPayload(&pyl)
