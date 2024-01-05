@@ -5,6 +5,8 @@ import (
 	"golang.local/app-srv/conf"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
 )
 
 func New(yaml conf.ConfigYaml) (*http.Server, *mux.Router) {
@@ -17,6 +19,9 @@ func New(yaml conf.ConfigYaml) (*http.Server, *mux.Router) {
 		Handler:      router,
 		ReadTimeout:  yaml.Listen.GetReadTimeout(),
 		WriteTimeout: yaml.Listen.GetWriteTimeout(),
+	}
+	if os.Getenv("LOG_REQUEST_METADATA") == "1" {
+		router.Use(debugMiddleware)
 	}
 	go runBackgroundHttp(s)
 	return s, router
@@ -43,5 +48,18 @@ func DomainNotAllowed(rw http.ResponseWriter, req *http.Request) {
 		} else {
 			WriteResponseHeaderCanWriteBody(req.Method, rw, http.StatusMethodNotAllowed, "")
 		}
+	}
+}
+
+func debugMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		DebugPrintln("REQ: " + r.Method + " ~ " + r.Host + " ~ " + r.RequestURI + " ~ " + strconv.Itoa(int(r.ContentLength)) + " ~ " + r.RemoteAddr)
+		next.ServeHTTP(w, r)
+	})
+}
+
+func DebugPrintln(msg string) {
+	if os.Getenv("DEBUG") == "1" {
+		log.Println("DEBUG:", msg)
 	}
 }

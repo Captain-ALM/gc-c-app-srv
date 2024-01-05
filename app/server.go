@@ -637,10 +637,6 @@ func InlineSend(conn *Connection, toSend *packet.Packet) {
 	}
 }
 
-func InDebugMode() bool {
-	return os.Getenv("DEBUG") == "1"
-}
-
 func DebugPrintln(msg string) {
 	if os.Getenv("DEBUG") == "1" {
 		log.Println("DEBUG:", msg)

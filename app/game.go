@@ -172,6 +172,7 @@ func (g *Game) gameSendLoop() {
 					return
 				}
 				g.metadata.QuestionNo = 1
+				g.zeroQuestionsAnswered()
 				g.metadata.State = byte(GameStateQuestion)
 				err := g.manager.Save(&g.metadata)
 				if err != nil {
@@ -281,6 +282,7 @@ func (g *Game) gameSendLoop() {
 				}
 				g.metadata.QuestionNo += 1
 				g.signalNextQ()
+				g.zeroQuestionsAnswered()
 				g.metadata.State = byte(GameStateQuestion)
 				err := g.manager.Save(&g.metadata)
 				if err != nil {
@@ -413,6 +415,15 @@ func (g *Game) questionAnswered(qNum uint32) {
 		case g.answerNotif <- g.answerCount:
 		}
 	}
+}
+
+func (g *Game) zeroQuestionsAnswered() {
+	if g == nil {
+		return
+	}
+	g.answerCMutex.Lock()
+	defer g.answerCMutex.Unlock()
+	g.answerCount = 0
 }
 
 func (g *Game) HasExpired() bool {
