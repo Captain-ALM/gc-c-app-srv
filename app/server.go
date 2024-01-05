@@ -2,6 +2,7 @@ package app
 
 import (
 	"crypto/rsa"
+	"encoding/hex"
 	"encoding/json"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/mux"
@@ -73,7 +74,7 @@ func (s *Server) connectionMonitor(conn *Connection) {
 	select {
 	case <-s.byeChan:
 	case <-tOut.C:
-		_ = conn.Close()
+		DebugErrIsNil(conn.Close())
 	case <-conn.GetTerminationChannel():
 	}
 }
@@ -84,7 +85,7 @@ func (s *Server) gameMonitor(game *Game) {
 	select {
 	case <-s.byeChan:
 	case <-tOut.C:
-		_ = game.Close()
+		DebugErrIsNil(game.Close())
 	case <-game.GetTerminationChannel():
 	}
 }
@@ -174,24 +175,28 @@ func (s *Server) connectionProcessor(conn *Connection) {
 				}
 			case packets.Halt:
 				if conn.Session.IsMasterServer() {
-					_ = s.Close()
+					DebugErrIsNil(s.Close())
 					DebugPrintln("App Server Closed")
 					return
 				}
 			case packets.AuthCheck:
 				if conn.Session == nil {
 					InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusLoggedOut, nil, "", nil)))
+					DebugPrintln("Auth State Logged Out")
 				} else {
 					InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusLoggedIn, conn.Session.GetTokenHash(), conn.Session.GetEmail(), nil)))
+					DebugPrintln("Auth State Logged In")
 				}
 			case packets.AuthLogout:
 				if conn.Session.Invalidate(s.manager) {
 					conn.Session = nil
 					InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusLoggedOut, nil, "", nil)))
+					DebugPrintln("Auth State Invalidated")
 				}
 			case packets.UserDelete:
 				if conn.Session != nil && conn.Session.DeleteUser(s.manager) {
 					InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusLoggedOut, nil, "", nil)))
+					DebugPrintln("Auth State Deleted")
 				}
 			case packets.TokenLogin:
 				var pyl packets.TokenLoginPayload
@@ -201,15 +206,19 @@ func (s *Server) connectionProcessor(conn *Connection) {
 						conn.Session = NewSession(pyl.Token, nil, s.manager, s.config.App)
 						if conn.Session == nil {
 							InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusRejectedJWT, nil, "", nil)))
+							DebugPrintln("Auth State Rejected")
 						} else {
 							InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusAcceptedJWT, conn.Session.GetTokenHash(), conn.Session.GetEmail(), nil)))
 							InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusLoggedIn, conn.Session.GetTokenHash(), conn.Session.GetEmail(), nil)))
+							DebugPrintln("Auth State Accepted : " + conn.Session.GetEmail() + " : " + hex.EncodeToString(conn.Session.GetTokenHash()))
 						}
 					} else {
 						if conn.Session.ValidateJWT(pyl.Token, s.manager, s.config.App) {
 							InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusAcceptedJWT, conn.Session.GetTokenHash(), conn.Session.GetEmail(), nil)))
+							DebugPrintln("Auth State Accepted : " + conn.Session.GetEmail() + " : " + hex.EncodeToString(conn.Session.GetTokenHash()))
 						} else {
 							InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusRejectedJWT, nil, "", nil)))
+							DebugPrintln("Auth State Rejected")
 						}
 					}
 				}
@@ -221,15 +230,19 @@ func (s *Server) connectionProcessor(conn *Connection) {
 						conn.Session = NewSession("", pyl.Hash, s.manager, s.config.App)
 						if conn.Session == nil {
 							InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusRejectedHash, nil, "", nil)))
+							DebugPrintln("Auth State Rejected")
 						} else {
 							InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusAcceptedHash, conn.Session.GetTokenHash(), conn.Session.GetEmail(), nil)))
 							InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusLoggedIn, conn.Session.GetTokenHash(), conn.Session.GetEmail(), nil)))
+							DebugPrintln("Auth State Accepted : " + conn.Session.GetEmail() + " : " + hex.EncodeToString(conn.Session.GetTokenHash()))
 						}
 					} else {
 						if conn.Session.ValidateHash(pyl.Hash, s.manager) {
 							InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusAcceptedHash, conn.Session.GetTokenHash(), conn.Session.GetEmail(), nil)))
+							DebugPrintln("Auth State Accepted : " + conn.Session.GetEmail() + " : " + hex.EncodeToString(conn.Session.GetTokenHash()))
 						} else {
 							InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusRejectedHash, nil, "", nil)))
+							DebugPrintln("Auth State Rejected")
 						}
 					}
 				}
@@ -240,8 +253,10 @@ func (s *Server) connectionProcessor(conn *Connection) {
 					if err == nil && pyl.QuizID > 0 && pyl.MaxCountdown > 0 {
 						if s.newGame(&pyl, conn) {
 							InlineSend(conn, packet.FromNew(packets.NewIDGuest(conn.GetPlayerID(), nil)))
+							DebugPrintln("New Game Created : " + strconv.Itoa(int(conn.GetGameID())) + " : " + strconv.Itoa(int(conn.GetPlayerID())))
 						} else {
 							InlineSend(conn, packet.FromNew(packets.NewGameError("Failed To Host", nil)))
+							DebugPrintln("Game Creation Failed")
 						}
 					}
 				}
@@ -257,11 +272,14 @@ func (s *Server) connectionProcessor(conn *Connection) {
 							if ok {
 								InlineSend(conn, packet.FromNew(packets.NewIDGuest(conn.GetPlayerID(), nil)))
 								InlineSend(conn, packet.FromNew(packets.NewGameStatus("Joining...", nil)))
+								DebugPrintln("Game Joined : " + strconv.Itoa(int(conn.GetGameID())) + " : " + strconv.Itoa(int(conn.GetPlayerID())))
 							} else {
 								InlineSend(conn, packet.FromNew(packets.NewGameError("Failed To Join", nil)))
+								DebugPrintln("Game Joining Failed : " + strconv.Itoa(int(pyl.ID)))
 							}
 						} else {
 							InlineSend(conn, packet.FromNew(packets.NewGameNotFound(nil)))
+							DebugPrintln("Game Not Found : " + strconv.Itoa(int(pyl.ID)))
 						}
 					}
 				}
@@ -282,16 +300,19 @@ func (s *Server) connectionProcessor(conn *Connection) {
 								conn.KickPlayer(false)
 								InlineSend(conn, packet.FromNew(packets.NewGameError("Failed To Rejoin", nil)))
 								InlineSend(conn, packet.FromNew(packets.NewIDGuest(0, nil)))
+								DebugPrintln("Game Rejoin Failed For Guest : " + strconv.Itoa(int(pyl.ID)))
 							}
 						} else {
 							InlineSend(conn, packet.FromNew(packets.NewGameNotFound(nil)))
 							InlineSend(conn, packet.FromNew(packets.NewIDGuest(0, nil)))
+							DebugPrintln("Game Not Found For Guest : " + strconv.Itoa(int(pyl.ID)))
 						}
 					}
 				}
 			case packets.QuizRequest:
 				if conn.Session == nil {
 					InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusRequired, nil, "", nil)))
+					DebugPrintln("Quiz Request Login Required")
 				} else {
 					var pyl packets.IDPayload
 					err := pk.GetPayload(&pyl)
@@ -300,23 +321,28 @@ func (s *Server) connectionProcessor(conn *Connection) {
 							tQuiz := s.loadQuiz(pyl.ID)
 							if tQuiz == nil {
 								InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateNotFound, nil)))
+								DebugPrintln("Quiz Request Not Found : " + strconv.Itoa(int(pyl.ID)))
 							} else {
 								tQs := s.loadQuestions(tQuiz)
 								tAs := s.loadAnswers(tQuiz)
 								if tQs == nil || tAs == nil {
 									InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateNotFound, nil)))
+									DebugPrintln("Quiz Request Not Found : " + strconv.Itoa(int(pyl.ID)))
 								} else {
 									InlineSend(conn, packet.FromNew(packets.NewQuizData(pyl.ID, tQuiz.Name, *tQs, *tAs, nil)))
+									DebugPrintln("Quiz Requested : " + strconv.Itoa(int(pyl.ID)))
 								}
 							}
 						} else {
 							InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateNotFound, nil)))
+							DebugPrintln("Quiz Request Not Found : " + strconv.Itoa(int(pyl.ID)))
 						}
 					}
 				}
 			case packets.QuizSearch:
 				if conn.Session == nil {
 					InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusRequired, nil, "", nil)))
+					DebugPrintln("Quiz Search Login Required")
 				} else {
 					var pyl packets.QuizSearchPayload
 					err := pk.GetPayload(&pyl)
@@ -327,11 +353,13 @@ func (s *Server) connectionProcessor(conn *Connection) {
 							qLE = append(qLE, packets.QuizListEntry{ID: csr.ID, Name: csr.Name, Mine: conn.Session.GetEmail() == csr.OwnerEmail, Public: csr.IsPublic})
 						}
 						InlineSend(conn, packet.FromNew(packets.NewQuizList(qLE, nil)))
+						DebugPrintln("Quiz Searched : " + pyl.Name)
 					}
 				}
 			case packets.QuizDelete:
 				if conn.Session == nil {
 					InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusRequired, nil, "", nil)))
+					DebugPrintln("Quiz Delete Login Required")
 				} else {
 					var pyl packets.IDPayload
 					err := pk.GetPayload(&pyl)
@@ -340,15 +368,18 @@ func (s *Server) connectionProcessor(conn *Connection) {
 							err := s.manager.Delete(&tables.Quiz{ID: pyl.ID})
 							if DebugErrIsNil(err) {
 								InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateDeleted, nil)))
+								DebugPrintln("Quiz Deleted : " + strconv.Itoa(int(pyl.ID)))
 							}
 						} else {
 							InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateNotFound, nil)))
+							DebugPrintln("Quiz Delete Quiz Not Found : " + strconv.Itoa(int(pyl.ID)))
 						}
 					}
 				}
 			case packets.QuizUpload:
 				if conn.Session == nil {
 					InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusRequired, nil, "", nil)))
+					DebugPrintln("Quiz Request Upload Required")
 				} else {
 					var pyl packets.QuizDataPayload
 					err := pk.GetPayload(&pyl)
@@ -365,23 +396,29 @@ func (s *Server) connectionProcessor(conn *Connection) {
 								s.saveAnswers(tQuiz, &pyl.Answers)
 								if s.saveQuiz(tQuiz) {
 									InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateCreated, nil)))
+									DebugPrintln("Quiz Upload Created : " + strconv.Itoa(int(pyl.ID)))
 								} else {
 									InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateUploadFailed, nil)))
+									DebugPrintln("Quiz Upload Failed : " + strconv.Itoa(int(pyl.ID)))
 								}
 							} else {
 								InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateNotFound, nil)))
+								DebugPrintln("Quiz Upload Quiz Not Found : " + strconv.Itoa(int(pyl.ID)))
 							}
 						} else {
 							tQuiz := s.loadQuizMetadata(pyl.ID)
 							if tQuiz == nil {
 								InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateUploadFailed, nil)))
+								DebugPrintln("Quiz Upload Failed : " + strconv.Itoa(int(pyl.ID)))
 							} else {
 								s.saveQuestions(tQuiz, &pyl.Questions)
 								s.saveAnswers(tQuiz, &pyl.Answers)
 								if s.saveQuiz(tQuiz) {
 									InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateCreated, nil)))
+									DebugPrintln("Quiz Upload Created : " + strconv.Itoa(int(pyl.ID)))
 								} else {
 									InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateUploadFailed, nil)))
+									DebugPrintln("Quiz Upload Failed : " + strconv.Itoa(int(pyl.ID)))
 								}
 							}
 						}
@@ -390,6 +427,7 @@ func (s *Server) connectionProcessor(conn *Connection) {
 			case packets.QuizVisibility:
 				if conn.Session == nil {
 					InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusRequired, nil, "", nil)))
+					DebugPrintln("Quiz Visibility Login Required")
 				} else {
 					var pyl packets.QuizVisibilityPayload
 					err := pk.GetPayload(&pyl)
@@ -401,13 +439,16 @@ func (s *Server) connectionProcessor(conn *Connection) {
 								if s.saveQuizMetadata(tQuiz) {
 									if pyl.Public {
 										InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStatePublic, nil)))
+										DebugPrintln("Quiz Visibility Now Public : " + strconv.Itoa(int(pyl.ID)))
 									} else {
 										InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStatePrivate, nil)))
+										DebugPrintln("Quiz Visibility Now Private : " + strconv.Itoa(int(pyl.ID)))
 									}
 								}
 							}
 						} else {
 							InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateNotFound, nil)))
+							DebugPrintln("Quiz Visibility Quiz Not Found : " + strconv.Itoa(int(pyl.ID)))
 						}
 					}
 				}

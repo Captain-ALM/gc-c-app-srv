@@ -7,6 +7,7 @@ import (
 	"golang.local/gc-c-db/db"
 	"golang.local/gc-c-db/tables"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -157,6 +158,7 @@ func (g *Game) gameSendLoop() {
 	for g.IsActive() {
 		switch GameState(g.metadata.State) {
 		case GameStateLobby:
+			DebugPrintln("Game In Lobby: " + strconv.Itoa(int(g.metadata.ID)))
 			select {
 			case <-g.termChan:
 				return
@@ -181,6 +183,7 @@ func (g *Game) gameSendLoop() {
 				}
 			}
 		case GameStateQuestion:
+			DebugPrintln("Game In Question[" + strconv.Itoa(int(g.metadata.QuestionNo)) + "]: " + strconv.Itoa(int(g.metadata.ID)))
 			g.sendToAll(packet.FromNew(packets.NewGameQuestion(g.quizQuestions.Questions[g.metadata.QuestionNo], g.quizAnswers.Answers[g.metadata.QuestionNo], nil)))
 			cDownFinChan = make(chan bool)
 			cDownStopChan = make(chan bool)
@@ -194,6 +197,7 @@ func (g *Game) gameSendLoop() {
 			}
 			go g.countdownProcessor(cDownFinChan, cDownStopChan, cDownWG)
 		case GameStateQuestionWait:
+			DebugPrintln("Game In Question[" + strconv.Itoa(int(g.metadata.QuestionNo)) + "] Waiting: " + strconv.Itoa(int(g.metadata.ID)))
 			select {
 			case <-g.termChan:
 				cDownWG.Wait()
@@ -233,6 +237,7 @@ func (g *Game) gameSendLoop() {
 				}
 			}
 		case GameStateAnswerShow:
+			DebugPrintln("Game In Answer for Q[" + strconv.Itoa(int(g.metadata.QuestionNo)) + "]: " + strconv.Itoa(int(g.metadata.ID)))
 			g.sendToAll(packet.FromNew(packets.NewGameAnswer(g.quizAnswers.Answers[g.metadata.QuestionNo].CorrectAnswer, g.metadata.QuestionNo, nil)))
 			g.metadata.State = byte(GameStateAnswerShowWait)
 			err := g.manager.Save(&g.metadata)
@@ -241,6 +246,7 @@ func (g *Game) gameSendLoop() {
 				return
 			}
 		case GameStateAnswerShowWait:
+			DebugPrintln("Game In Answer for Q[" + strconv.Itoa(int(g.metadata.QuestionNo)) + "] Waiting: " + strconv.Itoa(int(g.metadata.ID)))
 			select {
 			case <-g.termChan:
 				return
@@ -259,6 +265,7 @@ func (g *Game) gameSendLoop() {
 				}
 			}
 		case GameStateLeaderboard:
+			DebugPrintln("Game In Leaderboard for Q[" + strconv.Itoa(int(g.metadata.QuestionNo)) + "]: " + strconv.Itoa(int(g.metadata.ID)))
 			g.sendToAll(packet.FromNew(packets.NewGameLeaderboard(g.getLeaderboard(), nil)))
 			g.metadata.State = byte(GameStateLeaderboardWait)
 			err := g.manager.Save(&g.metadata)
@@ -267,6 +274,7 @@ func (g *Game) gameSendLoop() {
 				return
 			}
 		case GameStateLeaderboardWait:
+			DebugPrintln("Game In Leaderboard for Q[" + strconv.Itoa(int(g.metadata.QuestionNo)) + "] Waiting: " + strconv.Itoa(int(g.metadata.ID)))
 			select {
 			case <-g.termChan:
 				return
@@ -352,6 +360,8 @@ func (g *Game) hostRecvLoop(conn *Connection) {
 			case packets.GameLeave:
 				fallthrough
 			case packets.GameEnd:
+				DebugErrIsNil(g.Close())
+				DebugPrintln("Game Ended: " + strconv.Itoa(int(g.metadata.ID)))
 				return
 			case packets.GameProceed:
 				select {
@@ -360,6 +370,7 @@ func (g *Game) hostRecvLoop(conn *Connection) {
 				case <-conn.GetTerminationChannel():
 					return
 				case g.proceedNotif <- true:
+					DebugPrintln("Game Continued: " + strconv.Itoa(int(g.metadata.ID)))
 				}
 			case packets.KickGuest:
 				var pyl packets.IDPayload
@@ -370,6 +381,7 @@ func (g *Game) hostRecvLoop(conn *Connection) {
 					ForkedSend(kConn, packet.FromNew(packets.NewIDGuest(0, nil)))
 					g.RemoveConnection(kConn)
 					kConn.KickPlayer(true)
+					DebugPrintln("Game Player Kicked: " + strconv.Itoa(int(g.metadata.ID)) + " Who: " + strconv.Itoa(int(pyl.ID)))
 				}
 			}
 		}
@@ -391,6 +403,7 @@ func (g *Game) guestRecvLoop(conn *Connection) {
 			case packets.GameLeave:
 				fallthrough
 			case packets.GameEnd:
+				DebugPrintln("Game Left: " + strconv.Itoa(int(g.metadata.ID)))
 				return
 			case packets.GameCommit:
 				if g.metadata.State == byte(GameStateQuestion) || g.metadata.State == byte(GameStateQuestionWait) {
@@ -399,6 +412,7 @@ func (g *Game) guestRecvLoop(conn *Connection) {
 					if err == nil && pyl.QuestionNumber == g.metadata.QuestionNo {
 						conn.AddScore(g.getConnectionCount()-g.answerCount-1, pyl.Index == g.quizAnswers.Answers[g.metadata.QuestionNo].CorrectAnswer, g.metadata.StreakEnabled)
 						g.questionAnswered(pyl.QuestionNumber)
+						DebugPrintln("Game Player Answered: " + strconv.Itoa(int(g.metadata.ID)) + " Q/A: " + strconv.Itoa(int(pyl.QuestionNumber)) + "/" + strconv.Itoa(int(pyl.Index)))
 					}
 				}
 			}
@@ -476,6 +490,7 @@ func (g *Game) Close() error {
 		if g.endCallback != nil {
 			g.endCallback(g)
 		}
+		DebugPrintln("Game Closed: " + strconv.Itoa(int(g.metadata.ID)))
 	}
 	return nil
 }

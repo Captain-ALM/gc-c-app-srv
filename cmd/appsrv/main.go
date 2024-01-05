@@ -10,6 +10,7 @@ import (
 	"golang.local/app-srv/conf"
 	"golang.local/app-srv/web"
 	"golang.local/gc-c-db/db"
+	"golang.local/gc-c-db/tables"
 	"gopkg.in/yaml.v3"
 	"log"
 	"os"
@@ -87,6 +88,20 @@ func main() {
 	err = manager.AssureAllTables()
 	if err != nil {
 		log.Fatalln("Failed to assure DB schema:", err)
+	}
+
+	if os.Getenv("DB_CLEAR_GAMES") == "1" {
+		tGames, err := tables.Server{ID: configYml.Identity.ID}.GetChildrenGames(manager.Engine)
+		if err == nil {
+			for _, cmg := range tGames {
+				err = manager.Delete(cmg)
+				if err != nil {
+					log.Println("[WARN] Could not clear game:", cmg.ID, ":", err)
+				}
+			}
+		} else {
+			log.Println("[WARN] Could not get games to clear:", err)
+		}
 	}
 
 	//Load keys:
