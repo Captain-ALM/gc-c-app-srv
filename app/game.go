@@ -339,6 +339,8 @@ func (g *Game) waitForHostReconnect(st bool) (terminate bool) {
 
 func (g *Game) hostRecvLoop(conn *Connection) {
 	defer g.RemoveConnection(conn)
+	defer conn.LeftGame()
+	conn.EnteredGame()
 	for g.IsActive() && conn.IsActive() {
 		select {
 		case <-g.termChan:
@@ -376,6 +378,8 @@ func (g *Game) hostRecvLoop(conn *Connection) {
 
 func (g *Game) guestRecvLoop(conn *Connection) {
 	defer g.RemoveConnection(conn)
+	defer conn.LeftGame()
+	conn.EnteredGame()
 	for g.IsActive() && conn.IsActive() {
 		select {
 		case <-g.termChan:

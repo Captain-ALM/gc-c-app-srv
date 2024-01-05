@@ -151,6 +151,7 @@ func (s *Server) connectionProcessor(conn *Connection) {
 		case <-conn.GetTerminationChannel():
 			return
 		case pk := <-conn.GetOuttakeServer():
+			DebugPrintln("PK_CMD: " + pk.GetCommand())
 			switch pk.GetCommand() {
 			case packets.ID:
 				DebugErrIsNil(pk.Verify(s.publicKey))

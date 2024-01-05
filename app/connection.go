@@ -11,35 +11,39 @@ import (
 
 func NewConnection(manager *db.Manager, transport transport.Transport, expiry time.Time) *Connection {
 	nConn := &Connection{
-		manager:       manager,
-		transport:     transport,
-		intake:        make(chan *packet.Packet),
-		outtakeServer: make(chan *packet.Packet),
-		outtakeGame:   make(chan *packet.Packet),
-		Session:       nil,
-		plaMutex:      &sync.Mutex{},
-		player:        nil,
-		expires:       expiry,
-		closeMutex:    &sync.Mutex{},
-		termChan:      make(chan bool),
+		manager:           manager,
+		transport:         transport,
+		intake:            make(chan *packet.Packet),
+		outtakeServer:     make(chan *packet.Packet),
+		outtakeGame:       make(chan *packet.Packet),
+		outtakeGameUNotif: make(chan bool),
+		Session:           nil,
+		plaMutex:          &sync.Mutex{},
+		player:            nil,
+		expires:           expiry,
+		closeMutex:        &sync.Mutex{},
+		termChan:          make(chan bool),
 	}
 	go nConn.intakePump()
 	go nConn.outtakePump()
+	go nConn.outtakeNoGameDropPump()
 	return nConn
 }
 
 type Connection struct {
-	manager       *db.Manager
-	transport     transport.Transport
-	intake        chan *packet.Packet
-	outtakeServer chan *packet.Packet
-	outtakeGame   chan *packet.Packet
-	Session       *Session
-	plaMutex      *sync.Mutex
-	player        *Player
-	expires       time.Time
-	closeMutex    *sync.Mutex
-	termChan      chan bool
+	manager           *db.Manager
+	transport         transport.Transport
+	intake            chan *packet.Packet
+	outtakeServer     chan *packet.Packet
+	outtakeGame       chan *packet.Packet
+	outtakeGameUNotif chan bool
+	gameActive        bool
+	Session           *Session
+	plaMutex          *sync.Mutex
+	player            *Player
+	expires           time.Time
+	closeMutex        *sync.Mutex
+	termChan          chan bool
 }
 
 func (c *Connection) GetID() transport.Transport {
@@ -125,6 +129,25 @@ func (c *Connection) outtakePump() {
 			cWG.Wait()
 		} else {
 			return
+		}
+	}
+}
+
+func (c *Connection) outtakeNoGameDropPump() {
+	for c.transport.IsActive() {
+		if c.gameActive {
+			select {
+			case <-c.termChan:
+				return
+			case <-c.outtakeGameUNotif:
+			}
+		} else {
+			select {
+			case <-c.termChan:
+				return
+			case <-c.outtakeGameUNotif:
+			case <-c.outtakeGame:
+			}
 		}
 	}
 }
@@ -266,4 +289,26 @@ func (c *Connection) Close() error {
 		//close(c.outtakeGame)
 	}
 	return c.transport.Close()
+}
+
+func (c *Connection) EnteredGame() {
+	if c == nil {
+		return
+	}
+	c.gameActive = true
+	select {
+	case <-c.termChan:
+	case c.outtakeGameUNotif <- true:
+	}
+}
+
+func (c *Connection) LeftGame() {
+	if c == nil {
+		return
+	}
+	c.gameActive = false
+	select {
+	case <-c.termChan:
+	case c.outtakeGameUNotif <- false:
+	}
 }
