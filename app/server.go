@@ -161,7 +161,7 @@ func (s *Server) connectionProcessor(conn *Connection) {
 					err := pk.GetPayload(&pyl)
 					DebugErrIsNil(err)
 					DebugPrintln(strconv.Itoa(int(pyl.ID)) + " : " + strconv.Itoa(int(s.config.Identity.ID)))
-					if err != nil && pyl.ID == s.config.Identity.ID {
+					if err == nil && pyl.ID == s.config.Identity.ID {
 						InlineSend(conn, packet.FromNew(packets.NewID(s.config.Identity.ID, nil)))
 						DebugPrintln("Master Connected")
 						conn.Session = NewMasterSession()
@@ -196,7 +196,7 @@ func (s *Server) connectionProcessor(conn *Connection) {
 			case packets.TokenLogin:
 				var pyl packets.TokenLoginPayload
 				err := pk.GetPayload(&pyl)
-				if err != nil {
+				if err == nil {
 					if conn.Session == nil {
 						conn.Session = NewSession(pyl.Token, nil, s.manager, s.config.App)
 						if conn.Session == nil {
@@ -216,7 +216,7 @@ func (s *Server) connectionProcessor(conn *Connection) {
 			case packets.HashLogin:
 				var pyl packets.HashLoginPayload
 				err := pk.GetPayload(&pyl)
-				if err != nil {
+				if err == nil {
 					if conn.Session == nil {
 						conn.Session = NewSession("", pyl.Hash, s.manager, s.config.App)
 						if conn.Session == nil {
@@ -237,7 +237,7 @@ func (s *Server) connectionProcessor(conn *Connection) {
 				if conn.GetGameID() == 0 {
 					var pyl packets.NewGamePayload
 					err := pk.GetPayload(&pyl)
-					if err != nil && pyl.QuizID > 0 && pyl.MaxCountdown > 0 {
+					if err == nil && pyl.QuizID > 0 && pyl.MaxCountdown > 0 {
 						if s.newGame(&pyl, conn) {
 							InlineSend(conn, packet.FromNew(packets.NewIDGuest(conn.GetPlayerID(), nil)))
 						} else {
@@ -249,7 +249,7 @@ func (s *Server) connectionProcessor(conn *Connection) {
 				if conn.GetGameID() == 0 {
 					var pyl packets.JoinGamePayload
 					err := pk.GetPayload(&pyl)
-					if err != nil && pyl.ID > 0 {
+					if err == nil && pyl.ID > 0 {
 						ok := conn.JoinGame(pyl.ID, pyl.Nickname)
 						tGame := s.getGameInstance(pyl.ID)
 						if ok && tGame != nil {
@@ -269,7 +269,7 @@ func (s *Server) connectionProcessor(conn *Connection) {
 				if conn.GetGameID() == 0 {
 					var pyl packets.IDPayload
 					err := pk.GetPayload(&pyl)
-					if err != nil && pyl.ID > 0 {
+					if err == nil && pyl.ID > 0 {
 						ok, isTheHost := conn.RejoinGame(pyl.ID)
 						tGame := s.getGameInstance(pyl.ID)
 						if ok && tGame != nil {
@@ -295,7 +295,7 @@ func (s *Server) connectionProcessor(conn *Connection) {
 				} else {
 					var pyl packets.IDPayload
 					err := pk.GetPayload(&pyl)
-					if err != nil {
+					if err == nil {
 						if s.isQuizAccessible(pyl.ID, conn.Session, false) {
 							tQuiz := s.loadQuiz(pyl.ID)
 							if tQuiz == nil {
@@ -320,7 +320,7 @@ func (s *Server) connectionProcessor(conn *Connection) {
 				} else {
 					var pyl packets.QuizSearchPayload
 					err := pk.GetPayload(&pyl)
-					if err != nil {
+					if err == nil {
 						sRes := s.searchQuizzes(pyl.Name, pyl.Filter, conn.Session)
 						var qLE []packets.QuizListEntry
 						for _, csr := range sRes {
@@ -335,7 +335,7 @@ func (s *Server) connectionProcessor(conn *Connection) {
 				} else {
 					var pyl packets.IDPayload
 					err := pk.GetPayload(&pyl)
-					if err != nil {
+					if err == nil {
 						if s.isQuizAccessible(pyl.ID, conn.Session, true) {
 							err := s.manager.Delete(&tables.Quiz{ID: pyl.ID})
 							if DebugErrIsNil(err) {
@@ -352,7 +352,7 @@ func (s *Server) connectionProcessor(conn *Connection) {
 				} else {
 					var pyl packets.QuizDataPayload
 					err := pk.GetPayload(&pyl)
-					if err != nil {
+					if err == nil {
 						if pyl.ID == 0 || !s.isQuizAccessible(pyl.ID, conn.Session, true) {
 							if pyl.ID == 0 {
 								tQuiz := &tables.Quiz{
@@ -393,7 +393,7 @@ func (s *Server) connectionProcessor(conn *Connection) {
 				} else {
 					var pyl packets.QuizVisibilityPayload
 					err := pk.GetPayload(&pyl)
-					if err != nil {
+					if err == nil {
 						if s.isQuizAccessible(pyl.ID, conn.Session, true) {
 							tQuiz := s.loadQuizMetadata(pyl.ID)
 							if tQuiz != nil {
