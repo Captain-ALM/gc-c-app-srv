@@ -128,6 +128,7 @@ func (c *Connection) outtakePump() {
 			}()
 			cWG.Wait()
 		} else {
+			DebugErrIsNil(err)
 			return
 		}
 	}
