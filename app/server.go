@@ -16,6 +16,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -159,6 +160,7 @@ func (s *Server) connectionProcessor(conn *Connection) {
 					var pyl packets.IDPayload
 					err := pk.GetPayload(&pyl)
 					DebugErrIsNil(err)
+					DebugPrintln(strconv.Itoa(int(pyl.ID)) + " : " + strconv.Itoa(int(s.config.Identity.ID)))
 					if err != nil && pyl.ID == s.config.Identity.ID {
 						InlineSend(conn, packet.FromNew(packets.NewID(s.config.Identity.ID, nil)))
 						DebugPrintln("Master Connected")
