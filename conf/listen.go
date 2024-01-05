@@ -31,7 +31,7 @@ func (ly ListenYaml) GetWriteTimeout() time.Duration {
 
 func (ly ListenYaml) GetBasePrefixURL() string {
 	bpURL := ly.BasePrefixURL
-	if !strings.HasPrefix("/", bpURL) {
+	if !strings.HasPrefix(bpURL, "/") {
 		bpURL = "/" + bpURL
 	}
 	if strings.HasSuffix(bpURL, "/") {
