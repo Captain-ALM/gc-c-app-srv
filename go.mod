@@ -21,7 +21,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421 // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/syndtr/goleveldb v1.0.0 // indirect
-	golang.local/gc-c-com v1.5.5 // indirect
+	golang.local/gc-c-com v1.5.1826 // indirect
 	golang.local/google-auth-id-token-verifier v0.0.0-20231213003332-5da84620427d // indirect
 	golang.org/x/exp v0.0.0-20231226003508-02704c960a9b // indirect
 	golang.org/x/net v0.19.0 // indirect
