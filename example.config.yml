@@ -1,0 +1,31 @@
+listen:
+  web: ":8080"
+  readTimeout: 2h
+  writeTimeout: 2h
+  domains:
+    - "127.0.0.1:8080"
+    - "::1:8080"
+    - "localhost:8080"
+  basePrefixURL: "/"
+DBPath: "mysql:root:root@tcp(localhost:3306)/GCloud_City?charset=utf8"
+identity:
+  id: 1
+  publicKey: |
+    -----BEGIN PUBLIC KEY-----
+    MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC2HIHXskzaIslAUtkgxzqNGhyS
+    zwJcryaVsvThwyZRAF70vwts60UhofbAtu6am1DwwMl0k43IcHd9Cdyds0COYFOj
+    LwQQiBsTxXPFg9/GcNVjvy2zcIRGB9kjvIH6+9SeezjzHFwMivDg4avEuXAyFjO6
+    Ue/hj0LtT8x2dm2vPwIDAQAB
+    -----END PUBLIC KEY-----
+  publicKeyURL: ""
+app:
+  maxQuizzes: 8192
+  maxQuestions: 128
+  maxAnswers: 8
+  maxGuests: 64
+  maxConnections: 32768
+  connectionLifetime: 8784h
+  gameLifetime: 2h
+  timeout: 15s
+  oAuthAudiences:
+    - "921991695707-c11npfk0ko3c8qurddveccbss1bpgs0j.apps.googleusercontent.com"

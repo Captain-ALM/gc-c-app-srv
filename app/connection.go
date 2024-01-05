@@ -171,17 +171,17 @@ func (c *Connection) JoinGame(gameID uint32, nick string) bool {
 	return c.player != nil
 }
 
-func (c *Connection) RejoinGame(guestID uint32) bool {
+func (c *Connection) RejoinGame(guestID uint32) (success bool, isTheHost bool) {
 	if c == nil || guestID == 0 {
-		return false
+		return false, false
 	}
 	c.plaMutex.Lock()
 	defer c.plaMutex.Unlock()
 	if c.player != nil {
-		return false
+		return false, false
 	}
 	c.player = NewPlayer(guestID, "", 0, c.manager)
-	return c.player != nil
+	return c.player != nil, c.player.IsHost()
 }
 
 func (c *Connection) AddScore(amount uint32, correct bool, streakEnabled bool) (score uint32, streak uint32) {

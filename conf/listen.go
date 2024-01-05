@@ -15,7 +15,7 @@ type ListenYaml struct {
 
 func (ly ListenYaml) GetReadTimeout() time.Duration {
 	if (ly.ReadTimeout.Seconds() < 1 && ly.ReadTimeout > 0) || ly.ReadTimeout < 0 {
-		return 1 * time.Second
+		return time.Second
 	} else {
 		return ly.ReadTimeout
 	}
@@ -23,7 +23,7 @@ func (ly ListenYaml) GetReadTimeout() time.Duration {
 
 func (ly ListenYaml) GetWriteTimeout() time.Duration {
 	if (ly.WriteTimeout.Seconds() < 1 && ly.WriteTimeout > 0) || ly.WriteTimeout < 0 {
-		return 1 * time.Second
+		return time.Second
 	} else {
 		return ly.WriteTimeout
 	}

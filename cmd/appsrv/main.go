@@ -102,6 +102,7 @@ func main() {
 	log.Println("[Main] Starting App Server Processing...")
 	appServer := &app.Server{}
 	appServer.Activate(configYml, pubk, muxer, manager)
+	muxer.PathPrefix("/").HandlerFunc(web.DomainNotAllowed)
 
 	//Safe Shutdown
 	sigs := make(chan os.Signal, 1)

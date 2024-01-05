@@ -31,7 +31,12 @@ func NewSession(jwtToken string, hashToken []byte, manager *db.Manager, cnf conf
 			err = manager.Save(&sesMeta)
 			if err == nil {
 				return &Session{metadata: sesMeta}
+			} else {
+				DebugPrintln(err.Error())
 			}
+		}
+		if err != nil {
+			DebugPrintln(err.Error())
 		}
 	}
 	if isNilOrEmpty(hashToken) {
@@ -42,6 +47,7 @@ func NewSession(jwtToken string, hashToken []byte, manager *db.Manager, cnf conf
 		if err == nil {
 			return &Session{metadata: sesMeta}
 		}
+		DebugPrintln(err.Error())
 		return nil
 	}
 }
@@ -59,7 +65,10 @@ func (s *Session) ValidateJWT(jwtToken string, manager *db.Manager, cnf conf.App
 		tHash := sha512.Sum512([]byte(jwtToken))
 		s.metadata.TokenHash = tHash[:]
 		err = manager.Save(&s.metadata)
-		return err == nil
+		return DebugErrIsNil(err)
+	}
+	if err != nil {
+		DebugPrintln(err.Error())
 	}
 	return false
 }
@@ -72,6 +81,7 @@ func (s *Session) ValidateHash(hashToken []byte, manager *db.Manager) bool {
 	if err == nil {
 		return bytes.Equal(hashToken, s.metadata.TokenHash)
 	}
+	DebugPrintln(err.Error())
 	return false
 }
 
@@ -81,7 +91,7 @@ func (s *Session) Invalidate(manager *db.Manager) bool {
 	}
 	s.metadata.TokenHash = nil
 	err := manager.Save(&s.metadata)
-	return err == nil
+	return DebugErrIsNil(err)
 }
 
 func (s *Session) DeleteUser(manager *db.Manager) bool {
@@ -89,7 +99,7 @@ func (s *Session) DeleteUser(manager *db.Manager) bool {
 		return false
 	}
 	err := manager.Delete(s.metadata.GetIDObject())
-	return err == nil
+	return DebugErrIsNil(err)
 }
 
 func (s *Session) IsMasterServer() bool {

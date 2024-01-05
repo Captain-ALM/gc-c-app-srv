@@ -9,7 +9,6 @@ import (
 
 func New(yaml conf.ConfigYaml) (*http.Server, *mux.Router) {
 	router := mux.NewRouter()
-	router.PathPrefix("/").HandlerFunc(domainNotAllowed)
 	if yaml.Listen.Web == "" {
 		log.Fatalf("[Http] Invalid Listening Address")
 	}
@@ -34,22 +33,9 @@ func runBackgroundHttp(s *http.Server) {
 	}
 }
 
-func domainNotAllowed(rw http.ResponseWriter, req *http.Request) {
+func DomainNotAllowed(rw http.ResponseWriter, req *http.Request) {
 	if req.Method == http.MethodGet || req.Method == http.MethodHead {
-		WriteResponseHeaderCanWriteBody(req.Method, rw, http.StatusNotFound, "Domain Not Allowed")
-	} else {
-		rw.Header().Set("Allow", http.MethodOptions+", "+http.MethodGet+", "+http.MethodHead)
-		if req.Method == http.MethodOptions {
-			WriteResponseHeaderCanWriteBody(req.Method, rw, http.StatusOK, "")
-		} else {
-			WriteResponseHeaderCanWriteBody(req.Method, rw, http.StatusMethodNotAllowed, "")
-		}
-	}
-}
-
-func pageNotFound(rw http.ResponseWriter, req *http.Request) {
-	if req.Method == http.MethodGet || req.Method == http.MethodHead {
-		WriteResponseHeaderCanWriteBody(req.Method, rw, http.StatusNotFound, "Page Not Found")
+		WriteResponseHeaderCanWriteBody(req.Method, rw, http.StatusOK, "")
 	} else {
 		rw.Header().Set("Allow", http.MethodOptions+", "+http.MethodGet+", "+http.MethodHead)
 		if req.Method == http.MethodOptions {

@@ -25,6 +25,13 @@ func NewGame(manager *db.Manager, onEnd func(game *Game), hostConn *Connection, 
 	}
 	err := manager.Save(&gamMeta)
 	if err != nil {
+		DebugPrintln(err.Error())
+		return nil
+	}
+	ok := hostConn.HostGame(gamMeta.ID)
+	if !ok {
+		err := manager.Delete(gamMeta.GetIDObject())
+		DebugErrIsNil(err)
 		return nil
 	}
 	conns := make(map[transport.Transport]*Connection)
@@ -168,6 +175,7 @@ func (g *Game) gameSendLoop() {
 				g.metadata.State = byte(GameStateQuestion)
 				err := g.manager.Save(&g.metadata)
 				if err != nil {
+					DebugPrintln(err.Error())
 					return
 				}
 			}
@@ -180,6 +188,7 @@ func (g *Game) gameSendLoop() {
 			g.metadata.State = byte(GameStateQuestionWait)
 			err := g.manager.Save(&g.metadata)
 			if err != nil {
+				DebugPrintln(err.Error())
 				return
 			}
 			go g.countdownProcessor(cDownFinChan, cDownStopChan, cDownWG)
@@ -199,6 +208,7 @@ func (g *Game) gameSendLoop() {
 					g.metadata.State = byte(GameStateAnswerShow)
 					err := g.manager.Save(&g.metadata)
 					if err != nil {
+						DebugPrintln(err.Error())
 						return
 					}
 				}
@@ -209,6 +219,7 @@ func (g *Game) gameSendLoop() {
 				g.metadata.State = byte(GameStateAnswerShow)
 				err := g.manager.Save(&g.metadata)
 				if err != nil {
+					DebugPrintln(err.Error())
 					return
 				}
 			case <-cDownFinChan:
@@ -216,6 +227,7 @@ func (g *Game) gameSendLoop() {
 				g.metadata.State = byte(GameStateAnswerShow)
 				err := g.manager.Save(&g.metadata)
 				if err != nil {
+					DebugPrintln(err.Error())
 					return
 				}
 			}
@@ -224,6 +236,7 @@ func (g *Game) gameSendLoop() {
 			g.metadata.State = byte(GameStateAnswerShowWait)
 			err := g.manager.Save(&g.metadata)
 			if err != nil {
+				DebugPrintln(err.Error())
 				return
 			}
 		case GameStateAnswerShowWait:
@@ -240,6 +253,7 @@ func (g *Game) gameSendLoop() {
 				g.metadata.State = byte(GameStateLeaderboard)
 				err := g.manager.Save(&g.metadata)
 				if err != nil {
+					DebugPrintln(err.Error())
 					return
 				}
 			}
@@ -248,6 +262,7 @@ func (g *Game) gameSendLoop() {
 			g.metadata.State = byte(GameStateLeaderboardWait)
 			err := g.manager.Save(&g.metadata)
 			if err != nil {
+				DebugPrintln(err.Error())
 				return
 			}
 		case GameStateLeaderboardWait:
@@ -269,6 +284,7 @@ func (g *Game) gameSendLoop() {
 				g.metadata.State = byte(GameStateQuestion)
 				err := g.manager.Save(&g.metadata)
 				if err != nil {
+					DebugPrintln(err.Error())
 					return
 				}
 			}
@@ -349,6 +365,7 @@ func (g *Game) hostRecvLoop(conn *Connection) {
 					ForkedSend(kConn, packet.FromNew(packets.NewGameError("Kicked", nil)))
 					ForkedSend(kConn, packet.FromNew(packets.NewIDGuest(0, nil)))
 					g.RemoveConnection(kConn)
+					kConn.KickPlayer(true)
 				}
 			}
 		}

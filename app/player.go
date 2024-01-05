@@ -38,6 +38,7 @@ func NewPlayer(id uint32, nick string, gameID uint32, manager *db.Manager) *Play
 	if err == nil {
 		return &Player{metadata: plyMeta, host: isNickHost(plyMeta.Name)}
 	}
+	DebugPrintln(err.Error())
 	return nil
 }
 
@@ -117,5 +118,5 @@ func (p *Player) DeleteGuest(manager *db.Manager) bool {
 		return false
 	}
 	err := manager.Delete(p.metadata.GetIDObject())
-	return err == nil
+	return DebugErrIsNil(err)
 }
