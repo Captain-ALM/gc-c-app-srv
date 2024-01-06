@@ -8,7 +8,7 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/joho/godotenv v1.5.1
 	github.com/mattn/go-sqlite3 v1.14.19
-	golang.local/gc-c-db v1.1.2
+	golang.local/gc-c-db v1.1.5
 	gopkg.in/yaml.v3 v3.0.1
 )
 
