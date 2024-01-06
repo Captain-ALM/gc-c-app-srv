@@ -28,7 +28,7 @@ var (
 )
 
 func main() {
-	log.Printf("[Main] Starting up Decide Quiz Master Server #%s (%s)\n", buildVersion, buildDate)
+	log.Printf("[Main] Starting up Decide Quiz App Server #%s (%s)\n", buildVersion, buildDate)
 	y := time.Now()
 
 	//Hold main thread till safe shutdown exit:
