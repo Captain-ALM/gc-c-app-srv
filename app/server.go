@@ -547,7 +547,7 @@ func (s *Server) searchQuizzes(sTerm string, sFilter packets.EnumQuizSearchFilte
 		wSQL = append(wSQL, "AND Quiz_Name LIKE ?")
 		pSQL = append(pSQL, "%"+sTerm+"%")
 	}
-	dbSess := s.manager.Engine.UseBool().Cols("Quiz_ID", "Owner_Email", "Quiz_Name", "Quiz_Public").Where(strings.Join(wSQL, " "), pSQL...)
+	dbSess := s.manager.Engine.Cols("Quiz_ID", "Owner_Email", "Quiz_Name", "Quiz_Public").Where(strings.Join(wSQL, " "), pSQL...)
 	err := dbSess.Find(&toRet)
 	if err != nil {
 		DebugPrintln(err.Error())
@@ -585,7 +585,7 @@ func (s *Server) loadQuizMetadata(quizID uint32) *tables.Quiz {
 		return nil
 	}
 	tQuiz := tables.Quiz{ID: quizID}
-	exists, err := s.manager.Engine.UseBool().Cols("Quiz_ID", "Owner_Email", "Quiz_Name", "Quiz_Public").Get(&tQuiz)
+	exists, err := s.manager.Engine.ID(quizID).Cols("Quiz_ID", "Owner_Email", "Quiz_Name", "Quiz_Public").Get(&tQuiz)
 	if !exists || err != nil {
 		if err != nil {
 			DebugPrintln(err.Error())
@@ -599,7 +599,7 @@ func (s *Server) saveQuizMetadata(quiz *tables.Quiz) bool {
 	if s == nil || quiz == nil || s.manager == nil || s.manager.Engine == nil {
 		return false
 	}
-	_, err := s.manager.Engine.UseBool().Update(quiz, quiz.GetIDObject())
+	_, err := s.manager.Engine.ID(quiz.GetID()).Cols("Owner_Email", "Quiz_Name", "Quiz_Public").Update(quiz)
 	return DebugErrIsNil(err)
 }
 
