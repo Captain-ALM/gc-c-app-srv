@@ -29,3 +29,4 @@ app:
   timeout: 15s
   oAuthAudiences:
     - "921991695707-c11npfk0ko3c8qurddveccbss1bpgs0j.apps.googleusercontent.com"
+  sendBufferAmount: 180
