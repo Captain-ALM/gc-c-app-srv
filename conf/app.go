@@ -7,11 +7,12 @@ type AppYaml struct {
 	MaxQuestions       uint32        `yaml:"maxQuestions"`
 	MaxAnswers         uint32        `yaml:"maxAnswers"`
 	MaxGuests          uint32        `yaml:"maxGuests"`
-	MaxConnections     uint32        `json:"maxConnections"`
+	MaxConnections     uint32        `yaml:"maxConnections"`
 	ConnectionLifetime time.Duration `yaml:"connectionLifetime"`
 	GameLifetime       time.Duration `yaml:"gameLifetime"`
 	Timeout            time.Duration `yaml:"timeout"`
 	OAuthAudiences     []string      `yaml:"oAuthAudiences"`
+	SendBufferAmount   uint32        `yaml:"sendBufferAmount"`
 }
 
 func (ay AppYaml) GetMaxQuizzes() int {
@@ -72,5 +73,13 @@ func (ay AppYaml) GetTimeout() time.Duration {
 		return time.Second
 	} else {
 		return ay.Timeout
+	}
+}
+
+func (ay AppYaml) GetSendBufferAmount() int {
+	if ay.SendBufferAmount == 0 {
+		return 1
+	} else {
+		return int(ay.SendBufferAmount)
 	}
 }

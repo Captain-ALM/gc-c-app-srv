@@ -12,7 +12,33 @@ import (
 	"time"
 )
 
-func NewGame(manager *db.Manager, onEnd func(game *Game), hostConn *Connection, quiz *packets.QuizDataPayload, serverID uint32, countdownMax uint32, streakEnabled bool, expiry time.Time) *Game {
+func NewGameFromMetadata(manager *db.Manager, onEnd func(game *Game), gamMeta tables.Game, quiz *packets.QuizDataPayload, maxGuests int) *Game {
+	if manager == nil || quiz == nil {
+		return nil
+	}
+	nGam := &Game{
+		manager:         manager,
+		connections:     make(map[transport.Transport]*Connection),
+		hostConn:        nil,
+		connChangeNotif: make(chan *packets.HostedGamePayload),
+		hostConnNotif:   make(chan bool),
+		proceedNotif:    make(chan bool),
+		answerNotif:     make(chan uint32),
+		answerCMutex:    &sync.Mutex{},
+		conRWMutex:      &sync.RWMutex{},
+		metadata:        gamMeta,
+		quizQuestions:   quiz.Questions,
+		quizAnswers:     quiz.Answers,
+		endCallback:     onEnd,
+		closeMutex:      &sync.Mutex{},
+		termChan:        make(chan bool),
+		maxGuests:       maxGuests - 1,
+	}
+	go nGam.gameSendLoop()
+	return nGam
+}
+
+func NewGame(manager *db.Manager, onEnd func(game *Game), hostConn *Connection, quiz *packets.QuizDataPayload, serverID uint32, countdownMax uint32, streakEnabled bool, expiry time.Time, maxGuests int) *Game {
 	if manager == nil || hostConn == nil || quiz == nil {
 		return nil
 	}
@@ -53,6 +79,7 @@ func NewGame(manager *db.Manager, onEnd func(game *Game), hostConn *Connection, 
 		endCallback:     onEnd,
 		closeMutex:      &sync.Mutex{},
 		termChan:        make(chan bool),
+		maxGuests:       maxGuests - 1,
 	}
 	go nGam.gameSendLoop()
 	go nGam.hostRecvLoop(hostConn)
@@ -77,6 +104,7 @@ type Game struct {
 	closeMutex      *sync.Mutex
 	termChan        chan bool
 	countdownValue  uint32
+	maxGuests       int
 }
 
 func (g *Game) GetID() uint32 {
@@ -92,6 +120,9 @@ func (g *Game) AddGuest(newGuest *Connection) bool {
 	}
 	g.conRWMutex.Lock()
 	defer g.conRWMutex.Unlock()
+	if len(g.connections) >= g.maxGuests {
+		return false
+	}
 	if _, has := g.connections[newGuest.GetID()]; has {
 		return false
 	}
@@ -152,6 +183,11 @@ func (g *Game) RemoveConnection(conn *Connection) bool {
 
 func (g *Game) gameSendLoop() {
 	defer func() { _ = g.Close() }()
+	if g.hostConn == nil {
+		if g.waitForHostReconnect(false) {
+			return
+		}
+	}
 	var cDownFinChan chan bool
 	var cDownStopChan chan bool
 	var cDownWG *sync.WaitGroup
@@ -239,6 +275,7 @@ func (g *Game) gameSendLoop() {
 		case GameStateAnswerShow:
 			DebugPrintln("Game In Answer for Q[" + strconv.Itoa(int(g.metadata.QuestionNo)) + "]: " + strconv.Itoa(int(g.metadata.ID)))
 			g.sendToAll(packet.FromNew(packets.NewGameAnswer(g.quizAnswers.Answers[g.metadata.QuestionNo].CorrectAnswer, g.metadata.QuestionNo, nil)))
+			g.sendScoresToAllGuests()
 			g.metadata.State = byte(GameStateAnswerShowWait)
 			err := g.manager.Save(&g.metadata)
 			if err != nil {
@@ -542,7 +579,7 @@ func (g *Game) sendToAll(pk *packet.Packet) {
 	g.conRWMutex.RLock()
 	defer g.conRWMutex.RUnlock()
 	for _, cc := range g.connections {
-		ForkedSend(cc, pk)
+		InlineSendOrDrop(cc, pk)
 	}
 }
 
@@ -550,7 +587,7 @@ func (g *Game) sendHGPToAll(hgPyl *packets.HostedGamePayload) {
 	g.conRWMutex.RLock()
 	defer g.conRWMutex.RUnlock()
 	for _, cc := range g.connections {
-		ForkedSend(cc, packet.FromNew(packet.New(packets.HostedGame, g.getHostedGameGuestCopy(cc.GetPlayerID(), hgPyl), nil)))
+		InlineSendOrDrop(cc, packet.FromNew(packet.New(packets.HostedGame, g.getHostedGameGuestCopy(cc.GetPlayerID(), hgPyl), nil)))
 	}
 }
 
@@ -581,7 +618,7 @@ func (g *Game) sendScoresToAllGuests() {
 	for _, cc := range g.connections {
 		if cc != g.hostConn {
 			cScore, _ := cc.GetScore()
-			ForkedSend(cc, packet.FromNew(packets.NewGameScore(cScore, nil)))
+			InlineSendOrDrop(cc, packet.FromNew(packets.NewGameScore(cScore, nil)))
 		}
 	}
 }

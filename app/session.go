@@ -9,7 +9,7 @@ import (
 	googleAuthIDTokenVerifier "golang.local/google-auth-id-token-verifier"
 )
 
-var jwtVerifier = googleAuthIDTokenVerifier.Verifier{}
+var jwtVerifier = googleAuthIDTokenVerifier.NewVerifier()
 
 func isNilOrEmpty(bts []byte) bool {
 	if len(bts) != 64 {
@@ -60,8 +60,8 @@ func (s *Session) ValidateJWT(jwtToken string, manager *db.Manager, cnf conf.App
 	if s == nil {
 		return false
 	}
-	cSet, err := jwtVerifier.ClaimIDToken(jwtToken, cnf.OAuthAudiences)
-	if err == nil && cSet.Email == s.metadata.Email {
+	err := jwtVerifier.ValidateIDTokenEmail(jwtToken, cnf.OAuthAudiences, s.metadata.Email)
+	if err == nil {
 		tHash := sha512.Sum512([]byte(jwtToken))
 		s.metadata.TokenHash = tHash[:]
 		err = manager.Save(&s.metadata)

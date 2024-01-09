@@ -9,11 +9,11 @@ import (
 	"time"
 )
 
-func NewConnection(manager *db.Manager, transport transport.Transport, expiry time.Time) *Connection {
+func NewConnection(manager *db.Manager, transport transport.Transport, expiry time.Time, sBuffAmnt int) *Connection {
 	nConn := &Connection{
 		manager:           manager,
 		transport:         transport,
-		intake:            make(chan *packet.Packet),
+		intake:            make(chan *packet.Packet, sBuffAmnt),
 		outtakeServer:     make(chan *packet.Packet),
 		outtakeGame:       make(chan *packet.Packet),
 		outtakeGameUNotif: make(chan bool),

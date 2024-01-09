@@ -54,7 +54,7 @@ func (s *Server) Activate(config conf.ConfigYaml, pukk *rsa.PublicKey, router *m
 	}
 	wsListener := &transport.ListenWebsocket{Upgrader: websocket.Upgrader{HandshakeTimeout: config.App.GetTimeout(), ReadBufferSize: 8192, WriteBufferSize: 8192}}
 	rsListener := &transport.ListenHandler{}
-	s.multiListen = transport.NewMultiListener([]transport.Listener{wsListener, rsListener}, nil, s.clientConnect, s.clientClose, config.App.GetTimeout())
+	s.multiListen = transport.NewMultiListener([]transport.Listener{wsListener, rsListener}, s.clientAccept, s.clientConnect, s.clientClose, config.App.GetTimeout())
 	DebugPrintln("Timeout:" + config.App.GetTimeout().String())
 	wsListener.Activate()
 	rsListener.Activate()
@@ -65,6 +65,12 @@ func (s *Server) Activate(config conf.ConfigYaml, pukk *rsa.PublicKey, router *m
 		router.Host(cd).Path(config.Listen.GetBasePrefixURL() + config.Identity.GetID() + "/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		})
+	}
+	gamMetas := s.getGameMetadatas()
+	for _, gm := range gamMetas {
+		if !s.newGameFromMeta(gm) {
+			DebugErrIsNil(s.manager.Delete(&gm))
+		}
 	}
 }
 
@@ -90,12 +96,24 @@ func (s *Server) gameMonitor(game *Game) {
 	}
 }
 
+func (s *Server) clientAccept(l transport.Listener, t transport.Transport) transport.Transport {
+	if s == nil || t == nil {
+		return t
+	}
+	s.conRWMutex.RLock()
+	defer s.conRWMutex.RUnlock()
+	if len(s.connections) >= s.config.App.GetMaxConnections() {
+		return nil
+	}
+	return t
+}
+
 func (s *Server) clientConnect(l transport.Listener, t transport.Transport) {
 	if s == nil || t == nil {
 		return
 	}
 	DebugPrintln("Client Connected: " + t.GetID() + " : " + t.GetTimeout().String())
-	conn := NewConnection(s.manager, t, time.Now().Add(s.config.App.GetConnectionLifetime()))
+	conn := NewConnection(s.manager, t, time.Now().Add(s.config.App.GetConnectionLifetime()), s.config.App.GetSendBufferAmount())
 	if conn != nil {
 		s.conRWMutex.Lock()
 		defer s.conRWMutex.Unlock()
@@ -381,44 +399,58 @@ func (s *Server) connectionProcessor(conn *Connection) {
 					InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusRequired, nil, "", nil)))
 					DebugPrintln("Quiz Request Upload Required")
 				} else {
-					var pyl packets.QuizDataPayload
-					err := pk.GetPayload(&pyl)
-					if err == nil {
-						if pyl.ID == 0 || !s.isQuizAccessible(pyl.ID, conn.Session, true) {
-							if pyl.ID == 0 {
-								tQuiz := &tables.Quiz{
-									ID:         pyl.ID,
-									OwnerEmail: conn.Session.GetEmail(),
-									Name:       pyl.Name,
-									IsPublic:   false,
-								}
-								s.saveQuestions(tQuiz, &pyl.Questions)
-								s.saveAnswers(tQuiz, &pyl.Answers)
-								if s.saveQuiz(tQuiz) {
-									InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateCreated, nil)))
-									DebugPrintln("Quiz Upload Created : " + strconv.Itoa(int(pyl.ID)))
+					if s.getQuizCount(conn.Session) >= s.config.App.GetMaxQuizzes() {
+						InlineSend(conn, packet.FromNew(packets.NewQuizState(0, packets.EnumQuizStateUploadFailed, nil)))
+					} else {
+						var pyl packets.QuizDataPayload
+						err := pk.GetPayload(&pyl)
+						if err == nil {
+							if pyl.ID == 0 || !s.isQuizAccessible(pyl.ID, conn.Session, true) {
+								if pyl.ID == 0 {
+									tQuiz := &tables.Quiz{
+										ID:         pyl.ID,
+										OwnerEmail: conn.Session.GetEmail(),
+										Name:       pyl.Name,
+										IsPublic:   false,
+									}
+									iOK := s.saveQuestions(tQuiz, &pyl.Questions)
+									if iOK {
+										iOK = s.saveAnswers(tQuiz, &pyl.Answers)
+										if iOK {
+											iOK = s.saveQuiz(tQuiz)
+										}
+									}
+									if iOK {
+										InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateCreated, nil)))
+										DebugPrintln("Quiz Upload Created : " + strconv.Itoa(int(pyl.ID)))
+									} else {
+										InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateUploadFailed, nil)))
+										DebugPrintln("Quiz Upload Failed : " + strconv.Itoa(int(pyl.ID)))
+									}
 								} else {
-									InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateUploadFailed, nil)))
-									DebugPrintln("Quiz Upload Failed : " + strconv.Itoa(int(pyl.ID)))
+									InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateNotFound, nil)))
+									DebugPrintln("Quiz Upload Quiz Not Found : " + strconv.Itoa(int(pyl.ID)))
 								}
 							} else {
-								InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateNotFound, nil)))
-								DebugPrintln("Quiz Upload Quiz Not Found : " + strconv.Itoa(int(pyl.ID)))
-							}
-						} else {
-							tQuiz := s.loadQuizMetadata(pyl.ID)
-							if tQuiz == nil {
-								InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateUploadFailed, nil)))
-								DebugPrintln("Quiz Upload Failed : " + strconv.Itoa(int(pyl.ID)))
-							} else {
-								s.saveQuestions(tQuiz, &pyl.Questions)
-								s.saveAnswers(tQuiz, &pyl.Answers)
-								if s.saveQuiz(tQuiz) {
-									InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateCreated, nil)))
-									DebugPrintln("Quiz Upload Created : " + strconv.Itoa(int(pyl.ID)))
-								} else {
+								tQuiz := s.loadQuizMetadata(pyl.ID)
+								if tQuiz == nil {
 									InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateUploadFailed, nil)))
 									DebugPrintln("Quiz Upload Failed : " + strconv.Itoa(int(pyl.ID)))
+								} else {
+									iOK := s.saveQuestions(tQuiz, &pyl.Questions)
+									if iOK {
+										iOK = s.saveAnswers(tQuiz, &pyl.Answers)
+										if iOK {
+											iOK = s.saveQuiz(tQuiz)
+										}
+									}
+									if iOK {
+										InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateCreated, nil)))
+										DebugPrintln("Quiz Upload Created : " + strconv.Itoa(int(pyl.ID)))
+									} else {
+										InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateUploadFailed, nil)))
+										DebugPrintln("Quiz Upload Failed : " + strconv.Itoa(int(pyl.ID)))
+									}
 								}
 							}
 						}
@@ -468,7 +500,29 @@ func (s *Server) newGame(sGamePayload *packets.NewGamePayload, hostConn *Connect
 	tQs := s.loadQuestions(tQuiz)
 	tAs := s.loadAnswers(tQuiz)
 	qDPyl := &packets.QuizDataPayload{ID: tQuiz.ID, Name: tQuiz.Name, Questions: *tQs, Answers: *tAs}
-	tGame := NewGame(s.manager, s.gameEnd, hostConn, qDPyl, s.config.Identity.ID, sGamePayload.MaxCountdown, sGamePayload.StreakEnabled, time.Now().Add(s.config.App.GetGameLifetime()))
+	tGame := NewGame(s.manager, s.gameEnd, hostConn, qDPyl, s.config.Identity.ID, sGamePayload.MaxCountdown, sGamePayload.StreakEnabled, time.Now().Add(s.config.App.GetGameLifetime()), s.config.App.GetMaxGuests())
+	if tGame == nil {
+		return false
+	}
+	s.gamRWMutex.Lock()
+	defer s.gamRWMutex.Unlock()
+	s.games[tGame.GetID()] = tGame
+	go s.gameMonitor(tGame)
+	return true
+}
+
+func (s *Server) newGameFromMeta(gMeta tables.Game) bool {
+	if s == nil || gMeta.ID == 0 {
+		return false
+	}
+	tQuiz := s.loadQuiz(gMeta.QuizID)
+	if tQuiz == nil {
+		return false
+	}
+	tQs := s.loadQuestions(tQuiz)
+	tAs := s.loadAnswers(tQuiz)
+	qDPyl := &packets.QuizDataPayload{ID: tQuiz.ID, Name: tQuiz.Name, Questions: *tQs, Answers: *tAs}
+	tGame := NewGameFromMetadata(s.manager, s.gameEnd, gMeta, qDPyl, s.config.App.GetMaxGuests())
 	if tGame == nil {
 		return false
 	}
@@ -515,6 +569,30 @@ func (s *Server) GetByeChannel() <-chan bool {
 		return nil
 	}
 	return s.byeChan
+}
+
+func (s *Server) getGameMetadatas() []tables.Game {
+	if s == nil || s.manager == nil || s.manager.Engine == nil {
+		return nil
+	}
+	tSrv := tables.Server{ID: s.config.Identity.ID}
+	toRet, err := tSrv.GetChildrenGames(s.manager.Engine)
+	if err != nil {
+		return nil
+	}
+	return toRet
+}
+
+func (s *Server) getQuizCount(cSession *Session) int {
+	if s == nil || s.manager == nil || s.manager.Engine == nil || cSession == nil {
+		return 0
+	}
+	tQ := tables.Quiz{OwnerEmail: cSession.GetEmail()}
+	cnt, err := s.manager.Engine.Count(&tQ)
+	if err != nil {
+		return 0
+	}
+	return int(cnt)
 }
 
 func (s *Server) searchQuizzes(sTerm string, sFilter packets.EnumQuizSearchFilter, cSession *Session) []tables.Quiz {
@@ -649,7 +727,7 @@ func (s *Server) loadAnswers(quizEntry *tables.Quiz) *packets.QuizAnswers {
 }
 
 func (s *Server) saveQuestions(quizEntry *tables.Quiz, quizQs *packets.QuizQuestions) bool {
-	if s == nil || quizEntry == nil || quizQs == nil {
+	if s == nil || quizEntry == nil || quizQs == nil || len(quizQs.Questions) >= s.config.App.GetMaxQuestions() {
 		return false
 	}
 	bts, err := json.Marshal(quizQs)
@@ -661,8 +739,13 @@ func (s *Server) saveQuestions(quizEntry *tables.Quiz, quizQs *packets.QuizQuest
 }
 
 func (s *Server) saveAnswers(quizEntry *tables.Quiz, quizAs *packets.QuizAnswers) bool {
-	if s == nil || quizEntry == nil || quizAs == nil {
+	if s == nil || quizEntry == nil || quizAs == nil || len(quizAs.Answers) >= s.config.App.GetMaxAnswers() {
 		return false
+	}
+	for _, cans := range quizAs.Answers {
+		if len(cans.Answers) >= s.config.App.GetMaxAnswers() {
+			return false
+		}
 	}
 	bts, err := json.Marshal(quizAs)
 	if err != nil {
@@ -674,6 +757,14 @@ func (s *Server) saveAnswers(quizEntry *tables.Quiz, quizAs *packets.QuizAnswers
 
 func ForkedSend(conn *Connection, toSend *packet.Packet) {
 	go InlineSend(conn, toSend)
+}
+
+func InlineSendOrDrop(conn *Connection, toSend *packet.Packet) {
+	select {
+	case <-conn.GetTerminationChannel():
+	case conn.GetIntake() <- toSend:
+	default:
+	}
 }
 
 func InlineSend(conn *Connection, toSend *packet.Packet) {
