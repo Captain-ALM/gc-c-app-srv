@@ -265,7 +265,10 @@ func (s *Server) connectionProcessor(conn *Connection) {
 					}
 				}
 			case packets.NewGame:
-				if conn.GetGameID() == 0 {
+				if conn.Session == nil {
+					InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusRequired, nil, "", nil)))
+					DebugPrintln("New Game Login Required")
+				} else if conn.GetGameID() == 0 {
 					var pyl packets.NewGamePayload
 					err := pk.GetPayload(&pyl)
 					if err == nil && pyl.QuizID > 0 && pyl.MaxCountdown > 0 {
