@@ -213,6 +213,7 @@ func (s *Server) connectionProcessor(conn *Connection) {
 				}
 			case packets.UserDelete:
 				if conn.Session != nil && conn.Session.DeleteUser(s.manager) {
+					conn.Session = nil
 					InlineSend(conn, packet.FromNew(packets.NewAuthStatus(packets.EnumAuthStatusLoggedOut, nil, "", nil)))
 					DebugPrintln("Auth State Deleted")
 				}
