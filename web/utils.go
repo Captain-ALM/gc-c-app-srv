@@ -11,7 +11,8 @@ func WriteResponseHeaderCanWriteBody(method string, rw http.ResponseWriter, stat
 		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		rw.Header().Set("X-Content-Type-Options", "nosniff")
 		rw.Header().Set("Content-Length", strconv.Itoa(len(message)+2))
-		SetNeverCacheHeader(rw.Header())
+		rw.Header().Set("Cache-Control", "max-age=0, no-cache, no-store, must-revalidate")
+		rw.Header().Set("Pragma", "no-cache")
 	}
 	rw.WriteHeader(statusCode)
 	if hasBody {
@@ -22,9 +23,4 @@ func WriteResponseHeaderCanWriteBody(method string, rw http.ResponseWriter, stat
 		return true
 	}
 	return false
-}
-
-func SetNeverCacheHeader(header http.Header) {
-	header.Set("Cache-Control", "max-age=0, no-cache, no-store, must-revalidate")
-	header.Set("Pragma", "no-cache")
 }

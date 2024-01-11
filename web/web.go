@@ -24,7 +24,6 @@ func New(yaml conf.ConfigYaml) (*http.Server, *mux.Router) {
 	if os.Getenv("LOG_REQUEST_METADATA") == "1" {
 		router.Use(debugMiddleware)
 	}
-	router.Use(requestLimitMiddlewareGetter(yaml.Listen.GetReadLimit()))
 	go runBackgroundHttp(s)
 	return s, router
 }
@@ -58,19 +57,6 @@ func debugMiddleware(next http.Handler) http.Handler {
 		DebugPrintln("REQ: " + r.Method + " ~ " + r.Host + " ~ " + r.RequestURI + " ~ " + strconv.Itoa(int(r.ContentLength)) + " ~ " + r.RemoteAddr)
 		next.ServeHTTP(w, r)
 	})
-}
-
-func requestLimitMiddlewareGetter(rqLim int64) func(next http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.ContentLength > rqLim {
-				w.WriteHeader(http.StatusExpectationFailed)
-				return
-			}
-			r.Body = http.MaxBytesReader(w, r.Body, rqLim)
-			next.ServeHTTP(w, r)
-		})
-	}
 }
 
 func DebugPrintln(msg string) {

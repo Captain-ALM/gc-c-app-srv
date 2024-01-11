@@ -55,7 +55,7 @@ func (s *Server) Activate(config conf.ConfigYaml, pukk *rsa.PublicKey, router *m
 	}
 	wsListener := &transport.ListenWebsocket{Upgrader: websocket.Upgrader{HandshakeTimeout: config.App.GetTimeout(), ReadBufferSize: 8192, WriteBufferSize: 8192}}
 	rsListener := &transport.ListenHandler{}
-	s.multiListen = transport.NewMultiListener([]transport.Listener{wsListener, rsListener}, s.clientAccept, s.clientConnect, s.clientClose, config.App.GetTimeout())
+	s.multiListen = transport.NewMultiListener([]transport.Listener{wsListener, rsListener}, s.clientAccept, s.clientConnect, s.clientClose, config.App.GetTimeout(), config.Listen.GetReadLimit())
 	DebugPrintln("Timeout:" + config.App.GetTimeout().String())
 	wsListener.Activate()
 	rsListener.Activate()
