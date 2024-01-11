@@ -178,7 +178,8 @@ func (c *Connection) HostGame(gameID uint32) bool {
 	if c.player != nil {
 		c.player.DeleteGuest(c.manager)
 	}
-	c.player = NewPlayer(0, c.getHostNickname(), gameID, c.manager)
+	hstNN := c.getHostNickname()
+	c.player = NewPlayer(0, hstNN, gameID, c.manager, hstNN)
 	return c.player != nil
 }
 
@@ -191,7 +192,7 @@ func (c *Connection) JoinGame(gameID uint32, nick string) bool {
 	if c.player != nil {
 		return false
 	}
-	c.player = NewPlayer(0, nick, gameID, c.manager)
+	c.player = NewPlayer(0, nick, gameID, c.manager, "")
 	return c.player != nil
 }
 
@@ -204,7 +205,7 @@ func (c *Connection) RejoinGame(guestID uint32) (success bool, isTheHost bool) {
 	if c.player != nil {
 		return false, false
 	}
-	c.player = NewPlayer(guestID, "", 0, c.manager)
+	c.player = NewPlayer(guestID, "", 0, c.manager, c.getHostNickname())
 	return c.player != nil, c.player.IsHost()
 }
 

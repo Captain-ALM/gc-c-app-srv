@@ -13,6 +13,7 @@ import (
 	"golang.local/gc-c-com/transport"
 	"golang.local/gc-c-db/db"
 	"golang.local/gc-c-db/tables"
+	"html"
 	"io"
 	"log"
 	"net/http"
@@ -414,7 +415,7 @@ func (s *Server) connectionProcessor(conn *Connection) {
 									tQuiz := &tables.Quiz{
 										ID:         pyl.ID,
 										OwnerEmail: conn.Session.GetEmail(),
-										Name:       pyl.Name,
+										Name:       html.EscapeString(pyl.Name),
 										IsPublic:   false,
 									}
 									iOK := s.saveQuestions(tQuiz, &pyl.Questions)
@@ -734,6 +735,10 @@ func (s *Server) saveQuestions(quizEntry *tables.Quiz, quizQs *packets.QuizQuest
 	if s == nil || quizEntry == nil || quizQs == nil || len(quizQs.Questions) >= s.config.App.GetMaxQuestions() {
 		return false
 	}
+	for cqi := range quizQs.Questions {
+		quizQs.Questions[cqi].Question = html.EscapeString(quizQs.Questions[cqi].Question)
+		quizQs.Questions[cqi].Type = html.EscapeString(quizQs.Questions[cqi].Type)
+	}
 	bts, err := json.Marshal(quizQs)
 	if err != nil {
 		return false
@@ -746,9 +751,13 @@ func (s *Server) saveAnswers(quizEntry *tables.Quiz, quizAs *packets.QuizAnswers
 	if s == nil || quizEntry == nil || quizAs == nil || len(quizAs.Answers) >= s.config.App.GetMaxAnswers() {
 		return false
 	}
-	for _, cans := range quizAs.Answers {
+	for cansi := range quizAs.Answers {
+		cans := &quizAs.Answers[cansi]
 		if len(cans.Answers) >= s.config.App.GetMaxAnswers() {
 			return false
+		}
+		for cai, _ := range cans.Answers {
+			cans.Answers[cai].Answer = html.EscapeString(cans.Answers[cai].Answer)
 		}
 	}
 	bts, err := json.Marshal(quizAs)

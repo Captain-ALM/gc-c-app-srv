@@ -3,6 +3,7 @@ package app
 import (
 	"golang.local/gc-c-db/db"
 	"golang.local/gc-c-db/tables"
+	"html"
 	"strings"
 )
 
@@ -13,30 +14,35 @@ func getNick(nick string) string {
 	return nick[:64]
 }
 
-func isNickHost(nick string) bool {
-	if len(nick) < 32 {
-		return true
+func isNickHost(nick string, expectedNick string) bool {
+	if expectedNick == "" {
+		return false
 	}
-	for i := 0; i < 32; i++ {
-		if byte(nick[i]) != 0 {
-			return false
-		}
-	}
-	return true
+	return nick == expectedNick
 }
 
-func NewPlayer(id uint32, nick string, gameID uint32, manager *db.Manager) *Player {
+func NewPlayer(id uint32, nick string, gameID uint32, manager *db.Manager, expectedHostNick string) *Player {
 	plyMeta := tables.Guest{ID: id}
 	var err error
+	isHost := false
 	if id > 0 {
 		err = manager.Load(&plyMeta)
+		isHost = isNickHost(plyMeta.Name, expectedHostNick)
+		if !isHost {
+			plyMeta.Name = getNick(html.EscapeString(plyMeta.Name))
+		}
 	} else {
-		plyMeta.Name = getNick(nick)
+		isHost = isNickHost(nick, expectedHostNick)
+		if isHost {
+			plyMeta.Name = getNick(nick)
+		} else {
+			plyMeta.Name = getNick(html.EscapeString(nick))
+		}
 		plyMeta.GameID = gameID
 		err = manager.Save(&plyMeta)
 	}
 	if err == nil {
-		return &Player{metadata: plyMeta, host: isNickHost(plyMeta.Name)}
+		return &Player{metadata: plyMeta, host: isHost}
 	}
 	DebugPrintln(err.Error())
 	return nil
