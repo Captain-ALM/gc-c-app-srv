@@ -11,6 +11,7 @@ type ListenYaml struct {
 	WriteTimeout  time.Duration `yaml:"writeTimeout"`
 	Domains       []string      `yaml:"domains"`
 	BasePrefixURL string        `yaml:"basePrefixURL"`
+	ReadLimit     int           `yaml:"readLimit"`
 }
 
 func (ly ListenYaml) GetReadTimeout() time.Duration {
@@ -39,4 +40,11 @@ func (ly ListenYaml) GetBasePrefixURL() string {
 	} else {
 		return bpURL + "/"
 	}
+}
+
+func (ly ListenYaml) GetReadLimit() int64 {
+	if ly.ReadLimit < 1024 {
+		return 1024
+	}
+	return int64(ly.ReadLimit)
 }
