@@ -442,6 +442,7 @@ func (s *Server) connectionProcessor(conn *Connection) {
 									InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateUploadFailed, nil)))
 									DebugPrintln("Quiz Upload Failed : " + strconv.Itoa(int(pyl.ID)))
 								} else {
+									tQuiz.Name = html.EscapeString(pyl.Name)
 									iOK := s.saveQuestions(tQuiz, &pyl.Questions)
 									if iOK {
 										iOK = s.saveAnswers(tQuiz, &pyl.Answers)
