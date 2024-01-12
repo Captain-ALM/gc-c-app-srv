@@ -426,11 +426,11 @@ func (s *Server) connectionProcessor(conn *Connection) {
 										}
 									}
 									if iOK {
-										InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateCreated, nil)))
-										DebugPrintln("Quiz Upload Created : " + strconv.Itoa(int(pyl.ID)))
+										InlineSend(conn, packet.FromNew(packets.NewQuizState(tQuiz.ID, packets.EnumQuizStateCreated, nil)))
+										DebugPrintln("Quiz Upload Created : " + strconv.Itoa(int(tQuiz.ID)))
 									} else {
-										InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateUploadFailed, nil)))
-										DebugPrintln("Quiz Upload Failed : " + strconv.Itoa(int(pyl.ID)))
+										InlineSend(conn, packet.FromNew(packets.NewQuizState(tQuiz.ID, packets.EnumQuizStateUploadFailed, nil)))
+										DebugPrintln("Quiz Upload Failed : " + strconv.Itoa(int(tQuiz.ID)))
 									}
 								} else {
 									InlineSend(conn, packet.FromNew(packets.NewQuizState(pyl.ID, packets.EnumQuizStateNotFound, nil)))
