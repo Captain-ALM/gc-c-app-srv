@@ -761,7 +761,7 @@ func (s *Server) saveAnswers(quizEntry *tables.Quiz, quizAs *packets.QuizAnswers
 	}
 	for cansi := range quizAs.Answers {
 		cans := &quizAs.Answers[cansi]
-		if len(cans.Answers) >= s.config.App.GetMaxAnswers() || len(cans.Answers) < 1 {
+		if len(cans.Answers) >= s.config.App.GetMaxAnswers() || len(cans.Answers) < 1 || cans.CorrectAnswer < 0 || cans.CorrectAnswer >= uint32(len(cans.Answers)) {
 			return false, 0
 		}
 		for cai, _ := range cans.Answers {
