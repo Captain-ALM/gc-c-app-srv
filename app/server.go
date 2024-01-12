@@ -418,10 +418,11 @@ func (s *Server) connectionProcessor(conn *Connection) {
 										Name:       html.EscapeString(pyl.Name),
 										IsPublic:   false,
 									}
-									iOK := s.saveQuestions(tQuiz, &pyl.Questions)
+									iOK, qNum := s.saveQuestions(tQuiz, &pyl.Questions)
 									if iOK {
-										iOK = s.saveAnswers(tQuiz, &pyl.Answers)
-										if iOK {
+										var aNum int
+										iOK, aNum = s.saveAnswers(tQuiz, &pyl.Answers)
+										if iOK && qNum == aNum {
 											iOK = s.saveQuiz(tQuiz)
 										}
 									}
@@ -443,10 +444,11 @@ func (s *Server) connectionProcessor(conn *Connection) {
 									DebugPrintln("Quiz Upload Failed : " + strconv.Itoa(int(pyl.ID)))
 								} else {
 									tQuiz.Name = html.EscapeString(pyl.Name)
-									iOK := s.saveQuestions(tQuiz, &pyl.Questions)
+									iOK, qNum := s.saveQuestions(tQuiz, &pyl.Questions)
 									if iOK {
-										iOK = s.saveAnswers(tQuiz, &pyl.Answers)
-										if iOK {
+										var aNum int
+										iOK, aNum = s.saveAnswers(tQuiz, &pyl.Answers)
+										if iOK && qNum == aNum {
 											iOK = s.saveQuiz(tQuiz)
 										}
 									}
@@ -737,9 +739,9 @@ func (s *Server) loadAnswers(quizEntry *tables.Quiz) *packets.QuizAnswers {
 	return &tAs
 }
 
-func (s *Server) saveQuestions(quizEntry *tables.Quiz, quizQs *packets.QuizQuestions) bool {
-	if s == nil || quizEntry == nil || quizQs == nil || len(quizQs.Questions) >= s.config.App.GetMaxQuestions() {
-		return false
+func (s *Server) saveQuestions(quizEntry *tables.Quiz, quizQs *packets.QuizQuestions) (bool, int) {
+	if s == nil || quizEntry == nil || quizQs == nil || len(quizQs.Questions) >= s.config.App.GetMaxQuestions() || len(quizQs.Questions) < 1 {
+		return false, 0
 	}
 	for cqi := range quizQs.Questions {
 		quizQs.Questions[cqi].Question = html.EscapeString(quizQs.Questions[cqi].Question)
@@ -747,20 +749,20 @@ func (s *Server) saveQuestions(quizEntry *tables.Quiz, quizQs *packets.QuizQuest
 	}
 	bts, err := json.Marshal(quizQs)
 	if err != nil {
-		return false
+		return false, 0
 	}
 	quizEntry.Questions = bts
-	return true
+	return true, len(quizQs.Questions)
 }
 
-func (s *Server) saveAnswers(quizEntry *tables.Quiz, quizAs *packets.QuizAnswers) bool {
-	if s == nil || quizEntry == nil || quizAs == nil || len(quizAs.Answers) >= s.config.App.GetMaxAnswers() {
-		return false
+func (s *Server) saveAnswers(quizEntry *tables.Quiz, quizAs *packets.QuizAnswers) (bool, int) {
+	if s == nil || quizEntry == nil || quizAs == nil || len(quizAs.Answers) >= s.config.App.GetMaxQuestions() || len(quizAs.Answers) < 1 {
+		return false, 0
 	}
 	for cansi := range quizAs.Answers {
 		cans := &quizAs.Answers[cansi]
-		if len(cans.Answers) >= s.config.App.GetMaxAnswers() {
-			return false
+		if len(cans.Answers) >= s.config.App.GetMaxAnswers() || len(cans.Answers) < 1 {
+			return false, 0
 		}
 		for cai, _ := range cans.Answers {
 			cans.Answers[cai].Answer = html.EscapeString(cans.Answers[cai].Answer)
@@ -768,10 +770,10 @@ func (s *Server) saveAnswers(quizEntry *tables.Quiz, quizAs *packets.QuizAnswers
 	}
 	bts, err := json.Marshal(quizAs)
 	if err != nil {
-		return false
+		return false, 0
 	}
 	quizEntry.Answers = bts
-	return true
+	return true, len(quizAs.Answers)
 }
 
 func ForkedSend(conn *Connection, toSend *packet.Packet) {
