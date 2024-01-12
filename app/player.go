@@ -39,7 +39,7 @@ func NewPlayer(id uint32, nick string, gameID uint32, manager *db.Manager, expec
 			plyMeta.Name = getNick(html.EscapeString(nick))
 		}
 		plyMeta.GameID = gameID
-		err = manager.Save(&plyMeta)
+		err = manager.Insert(&plyMeta)
 	}
 	if err == nil {
 		return &Player{metadata: plyMeta, host: isHost}

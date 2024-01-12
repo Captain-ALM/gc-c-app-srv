@@ -703,7 +703,12 @@ func (s *Server) saveQuiz(quiz *tables.Quiz) bool {
 	if s == nil || quiz == nil {
 		return false
 	}
-	err := s.manager.Save(quiz)
+	var err error
+	if quiz.ID == 0 {
+		err = s.manager.Insert(quiz)
+	} else {
+		err = s.manager.Save(quiz)
+	}
 	return DebugErrIsNil(err)
 }
 

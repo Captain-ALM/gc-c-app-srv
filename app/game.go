@@ -50,7 +50,7 @@ func NewGame(manager *db.Manager, onEnd func(game *Game), hostConn *Connection, 
 		Expiry:        expiry,
 		State:         byte(GameStateLobby),
 	}
-	err := manager.Save(&gamMeta)
+	err := manager.Insert(&gamMeta)
 	if err != nil {
 		DebugPrintln(err.Error())
 		return nil
