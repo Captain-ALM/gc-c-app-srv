@@ -9,7 +9,7 @@ require (
 	github.com/gorilla/websocket v1.5.1
 	github.com/joho/godotenv v1.5.1
 	github.com/mattn/go-sqlite3 v1.14.19
-	golang.local/gc-c-com v1.7.4
+	golang.local/gc-c-com v1.7.6
 	golang.local/gc-c-db v1.1.5
 	golang.local/google-auth-id-token-verifier v0.0.0-20240109152742-6c3de6f814c5
 	gopkg.in/yaml.v3 v3.0.1
